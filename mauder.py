@@ -17,9 +17,10 @@ def main(args: list):
     data_dir = here / "mdr-data-files"
     device_dir = data_dir / "device"
     foitext_dir = data_dir / "foitext"
+    patient_codes_file = data_dir / "patientproblemdata/patientproblemcodes.csv"
     maude_data, header = parse_device_files(device_dir, product_codes)
-    length_check(maude_data, header)
     maude_data, header = parse_foitext(foitext_dir, maude_data, header)
+    patient_codes = parse_patient_codes(patient_codes_file)
     length_check(maude_data, header)
 
     exit(0)
@@ -278,6 +279,21 @@ def parse_foitext(
                     pass
     header.extend(header_add)
     return maude_data, header
+
+
+def parse_patient_codes(patient_codes_file: pathlib.Path) -> dict[str, str]:
+    patient_codes = {}
+    print(f"reading file {patient_codes_file.name}")
+    with open(patient_codes_file, "r") as f:
+        i = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+        for line in iter(i.readline, b""):
+            line = line.decode("utf-8", errors="backslashreplace").rstrip("\r\n")
+            idx = line.find(",")
+            code = line[:idx]
+            problem = line[idx + 1 :]  # skip the comma
+            problem = problem.lstrip('"').rstrip('"')  # more MAUDE weirdness.
+            patient_codes[code] = problem
+    return patient_codes
 
 
 def print_help():
