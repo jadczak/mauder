@@ -28,7 +28,7 @@ The data downloaded from the website should be placed as indicated in the struct
     ├── mdrfoi
     |   └── [APJ] Maybe not needed?
     ├── patient
-    |   ├── patient.txt
+    |   ├── patient.txt [APJ] Maybe not needed?
     |   ├── ...
     |   └── patientchange.txt
     ├── patientproblemcode
@@ -49,3 +49,22 @@ Mauder is report based.  A quirk of this decision is that in the event that mult
 Another quirk is a report can have multiple patient problems associated with it, so it is not uncommon to see the same `PATIENT_SEQUENCE_NO` repeated multiple times for a given line with multiple problems listed in the next column over.  Pretty much anything that is being scraped from the `patientproblemcode.txt` file has the opportunity to look funny because of the way that data is tracked in the MAUDE database.
 
 Lastly there are "changes".  For the DEVICE, foitext, and the patient files there are separate files that have updates to "the existing base records".  That stuff will get tacked on with the word "change:" in the locations where some more data was added.
+
+# Performance
+Current performance on a i7-13700k with a Samsung 980 PRO NVMe reading data from 2022 and 2023.
+
+Product code OYC
+
+python 3.12 - 23.0 seconds
+pypy   3.10 - 21.3 seconds
+
+Dataset retrieved June 2024:
+- DEVICE2022.txt
+- DEVICE2023.txt
+- DEVICEChange.txt
+- deviceproblemcodes.csv
+- foitext2022.txt
+- foitext2023.txt
+- foitextChange.txt
+- patientproblemcode.txt
+

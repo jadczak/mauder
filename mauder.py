@@ -1,5 +1,5 @@
 from sys import argv, exit
-from typing import Generator
+from time import time
 import mmap
 import pathlib
 
@@ -8,6 +8,7 @@ MaudeData = dict[str, list[str]]
 
 
 def main(args: list):
+    start = time()
     if not args:
         print_help()
         exit(0)
@@ -27,7 +28,8 @@ def main(args: list):
     patient_codes = parse_patient_codes(patient_codes_file)
     maude_data, header = parse_patient_problems(patient_problem_dir, maude_data, header, patient_codes)
     length_check(maude_data, header)
-
+    end = time()
+    print(f"Elapsed time: {end - start}")
     exit(0)
 
 
@@ -50,7 +52,7 @@ def fill_blank_data(new_data: MaudeData, size: int, keys_to_update: set) -> Maud
     or if a report key is missing a particular bit of information.
     """
     for k in keys_to_update:
-        new_data[k].extend([""] * size)
+        new_data[k] = [""] * size
     return new_data
 
 
