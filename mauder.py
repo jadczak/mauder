@@ -3,6 +3,9 @@ from typing import Generator
 import mmap
 import pathlib
 
+# type aliases
+MaudeData = dict[str, list[str]]
+
 
 def main(args: list):
     if not args:
@@ -26,7 +29,7 @@ def main(args: list):
     exit(0)
 
 
-def length_check(maude_data: dict[str, list[str]], header: list[str]) -> None:
+def length_check(maude_data: MaudeData, header: list[str]) -> None:
     for key in maude_data:
         try:
             assert len(header) == len(maude_data[key])
@@ -36,62 +39,33 @@ def length_check(maude_data: dict[str, list[str]], header: list[str]) -> None:
             exit(0)
 
 
-def indexer() -> Generator[int, None, None]:
-    x = 0
-    while True:
-        yield x
-        x += 1
-
-
-def pre_fill(maude_data: dict[str, list[str]], size: int) -> dict[str, list[str]]:
+def fill_blank_data(new_data: MaudeData, size: int, keys_to_update: set) -> MaudeData:
     """
     The MAUDE database is a bit of a cluster at times.  Once we have the set of keys
     that we are focused on, any time we are going to parse a new dataset and add content
-    we should be extending the list pre-emptively to ensure that the column alignment
-    doesn't get screwed if there is an errant index error while adding the new data.
+    we should be following up after the update to ensure that the column alignment
+    doesn't get screwed if there is an errant index error while adding the new data,
+    or if a report key is missing a particular bit of information.
     """
-    for k in maude_data:
-        maude_data[k].extend([""] * size)
+    for k in keys_to_update:
+        new_data[k].extend([""] * size)
+    return new_data
+
+
+def extend_data(maude_data: MaudeData, new_data: MaudeData) -> MaudeData:
+    for key in maude_data:
+        maude_data[key].extend(new_data[key])
     return maude_data
 
 
-def parse_device_files(path: pathlib.Path, product_codes: set[str]) -> tuple[dict[str, list[str]], list[str]]:
-    idx = indexer()
-    MDR_REPORT_KEY = next(idx)
-    DEVICE_EVENT_KEY = next(idx)
-    IMPLANT_FLAG = next(idx)
-    DATE_REMOVED_FLAG = next(idx)
-    DEVICE_SEQUENCE_NO = next(idx)
-    DATE_RECEIVED = next(idx)
-    BRAND_NAME = next(idx)
-    GENERIC_NAME = next(idx)
-    MANUFACTURER_D_NAME = next(idx)
-    MANUFACTURER_D_ADDRESS_1 = next(idx)
-    MANUFACTURER_D_ADDRESS_2 = next(idx)
-    MANUFACTURER_D_CITY = next(idx)
-    MANUFACTURER_D_STATE_CODE = next(idx)
-    MANUFACTURER_D_ZIP_CODE = next(idx)
-    MANUFACTURER_D_ZIP_CODE_EXT = next(idx)
-    MANUFACTURER_D_COUNTRY_CODE = next(idx)
-    MANUFACTURER_D_POSTAL_CODE = next(idx)
-    DEVICE_OPERATOR = next(idx)
-    EXPIRATION_DATE_OF_DEVICE = next(idx)
-    MODEL_NUMBER = next(idx)
-    CATALOG_NUMBER = next(idx)
-    LOT_NUMBER = next(idx)
-    OTHER_ID_NUMBER = next(idx)
-    DEVICE_AVAILABILITY = next(idx)
-    DATE_RETURNED_TO_MANUFACTURER = next(idx)
-    DEVICE_REPORT_PRODUCT_CODE = next(idx)
-    DEVICE_AGE_TEXT = next(idx)
-    DEVICE_EVALUATED_BY_MANUFACTUR = next(idx)
-    COMBINATION_PRODUCT_FLAG = next(idx)
-    UDI_DI = next(idx)
-    UDI_PUBLIC = next(idx)
-
+def parse_device_files(path: pathlib.Path, product_codes: set[str]) -> tuple[MaudeData, list[str]]:
+    # I thought about doing this dynamically, but screw it.
+    # I'll fix it later if it becomes a problem.
+    REPORT_KEY = 0
+    PRODUCT_CODE = 25
     change_file = None
     header = []
-    maude_data: dict[str, list[str]] = {}
+    maude_data: MaudeData = {}
     print("Searching for Device files")
     for file in path.iterdir():
         if "Change" in file.name:
@@ -108,40 +82,8 @@ def parse_device_files(path: pathlib.Path, product_codes: set[str]) -> tuple[dic
                 for line in iter(i.readline, b""):
                     split_line = line.decode("utf-8", errors="backslashreplace").rstrip("\r\n").split("|")
                     try:
-                        if split_line[DEVICE_REPORT_PRODUCT_CODE] in product_codes:
-                            maude_data[split_line[MDR_REPORT_KEY]] = [
-                                split_line[MDR_REPORT_KEY],
-                                split_line[DEVICE_EVENT_KEY],
-                                split_line[IMPLANT_FLAG],
-                                split_line[DATE_REMOVED_FLAG],
-                                split_line[DEVICE_SEQUENCE_NO],
-                                split_line[DATE_RECEIVED],
-                                split_line[BRAND_NAME],
-                                split_line[GENERIC_NAME],
-                                split_line[MANUFACTURER_D_NAME],
-                                split_line[MANUFACTURER_D_ADDRESS_1],
-                                split_line[MANUFACTURER_D_ADDRESS_2],
-                                split_line[MANUFACTURER_D_CITY],
-                                split_line[MANUFACTURER_D_STATE_CODE],
-                                split_line[MANUFACTURER_D_ZIP_CODE],
-                                split_line[MANUFACTURER_D_ZIP_CODE_EXT],
-                                split_line[MANUFACTURER_D_COUNTRY_CODE],
-                                split_line[MANUFACTURER_D_POSTAL_CODE],
-                                split_line[DEVICE_OPERATOR],
-                                split_line[EXPIRATION_DATE_OF_DEVICE],
-                                split_line[MODEL_NUMBER],
-                                split_line[CATALOG_NUMBER],
-                                split_line[LOT_NUMBER],
-                                split_line[OTHER_ID_NUMBER],
-                                split_line[DEVICE_AVAILABILITY],
-                                split_line[DATE_RETURNED_TO_MANUFACTURER],
-                                split_line[DEVICE_REPORT_PRODUCT_CODE],
-                                split_line[DEVICE_AGE_TEXT],
-                                split_line[DEVICE_EVALUATED_BY_MANUFACTUR],
-                                split_line[COMBINATION_PRODUCT_FLAG],
-                                split_line[UDI_DI],
-                                split_line[UDI_PUBLIC],
-                            ]
+                        if split_line[PRODUCT_CODE] in product_codes:
+                            maude_data[split_line[REPORT_KEY]] = split_line
                     except IndexError:
                         # occasionally we get lines that aren't long enough.
                         # TODO: add some error logging here so we aren't failing silently?
@@ -154,62 +96,10 @@ def parse_device_files(path: pathlib.Path, product_codes: set[str]) -> tuple[dic
                 for line in iter(i.readline, b""):
                     split_line = line.decode("utf-8", errors="backslashreplace").rstrip("\r\n").split("|")
                     try:
-                        key = split_line[MDR_REPORT_KEY]
+                        key = split_line[REPORT_KEY]
                         if key in maude_data:
-                            maude_data[key][DEVICE_EVENT_KEY] += f"\nChange:\n{split_line[DEVICE_EVENT_KEY]}"
-                            maude_data[key][IMPLANT_FLAG] += f"\nChange:\n{split_line[IMPLANT_FLAG]}"
-                            maude_data[key][DATE_REMOVED_FLAG] += f"\nChange:\n{split_line[DATE_REMOVED_FLAG]}"
-                            maude_data[key][DEVICE_SEQUENCE_NO] += f"\nChange:\n{split_line[DEVICE_SEQUENCE_NO]}"
-                            maude_data[key][DATE_RECEIVED] += f"\nChange:\n{split_line[DATE_RECEIVED]}"
-                            maude_data[key][BRAND_NAME] += f"\nChange:\n{split_line[BRAND_NAME]}"
-                            maude_data[key][GENERIC_NAME] += f"\nChange:\n{split_line[GENERIC_NAME]}"
-                            maude_data[key][MANUFACTURER_D_NAME] += f"\nChange:\n{split_line[MANUFACTURER_D_NAME]}"
-                            maude_data[key][
-                                MANUFACTURER_D_ADDRESS_1
-                            ] += f"\nChange:\n{split_line[MANUFACTURER_D_ADDRESS_1]}"
-                            maude_data[key][
-                                MANUFACTURER_D_ADDRESS_2
-                            ] += f"\nChange:\n{split_line[MANUFACTURER_D_ADDRESS_2]}"
-                            maude_data[key][MANUFACTURER_D_CITY] += f"\nChange:\n{split_line[MANUFACTURER_D_CITY]}"
-                            maude_data[key][
-                                MANUFACTURER_D_STATE_CODE
-                            ] += f"\nChange:\n{split_line[MANUFACTURER_D_STATE_CODE]}"
-                            maude_data[key][
-                                MANUFACTURER_D_ZIP_CODE
-                            ] += f"\nChange:\n{split_line[MANUFACTURER_D_ZIP_CODE]}"
-                            maude_data[key][
-                                MANUFACTURER_D_ZIP_CODE_EXT
-                            ] += f"\nChange:\n{split_line[MANUFACTURER_D_ZIP_CODE_EXT]}"
-                            maude_data[key][
-                                MANUFACTURER_D_COUNTRY_CODE
-                            ] += f"\nChange:\n{split_line[MANUFACTURER_D_COUNTRY_CODE]}"
-                            maude_data[key][
-                                MANUFACTURER_D_POSTAL_CODE
-                            ] += f"\nChange:\n{split_line[MANUFACTURER_D_POSTAL_CODE]}"
-                            maude_data[key][DEVICE_OPERATOR] += f"\nChange:\n{split_line[DEVICE_OPERATOR]}"
-                            maude_data[key][
-                                EXPIRATION_DATE_OF_DEVICE
-                            ] += f"\nChange:\n{split_line[EXPIRATION_DATE_OF_DEVICE]}"
-                            maude_data[key][MODEL_NUMBER] += f"\nChange:\n{split_line[MODEL_NUMBER]}"
-                            maude_data[key][CATALOG_NUMBER] += f"\nChange:\n{split_line[CATALOG_NUMBER]}"
-                            maude_data[key][LOT_NUMBER] += f"\nChange:\n{split_line[LOT_NUMBER]}"
-                            maude_data[key][OTHER_ID_NUMBER] += f"\nChange:\n{split_line[OTHER_ID_NUMBER]}"
-                            maude_data[key][DEVICE_AVAILABILITY] += f"\nChange:\n{split_line[DEVICE_AVAILABILITY]}"
-                            maude_data[key][
-                                DATE_RETURNED_TO_MANUFACTURER
-                            ] += f"\nChange:\n{split_line[DATE_RETURNED_TO_MANUFACTURER]}"
-                            maude_data[key][
-                                DEVICE_REPORT_PRODUCT_CODE
-                            ] += f"\nChange:\n{split_line[DEVICE_REPORT_PRODUCT_CODE]}"
-                            maude_data[key][DEVICE_AGE_TEXT] += f"\nChange:\n{split_line[DEVICE_AGE_TEXT]}"
-                            maude_data[key][
-                                DEVICE_EVALUATED_BY_MANUFACTUR
-                            ] += f"\nChange:\n{split_line[DEVICE_EVALUATED_BY_MANUFACTUR]}"
-                            maude_data[key][
-                                COMBINATION_PRODUCT_FLAG
-                            ] += f"\nChange:\n{split_line[COMBINATION_PRODUCT_FLAG]}"
-                            maude_data[key][UDI_DI] += f"\nChange:\n{split_line[UDI_DI]}"
-                            maude_data[key][UDI_PUBLIC] += f"\nChange:\n{split_line[UDI_PUBLIC]}"
+                            for x in range(1, len(split_line)):
+                                maude_data[key][x] += f"\nChange:\n{split_line[x]}"
                     except IndexError:
                         # TODO: add some error logging here so we aren't failing siletly?
                         pass
@@ -217,19 +107,11 @@ def parse_device_files(path: pathlib.Path, product_codes: set[str]) -> tuple[dic
     return maude_data, header
 
 
-def parse_foitext(
-    path: pathlib.Path, maude_data: dict[str, list[str]], header: list[str]
-) -> tuple[dict[str, list[str]], list[str]]:
-    idx = indexer()
-    MDR_REPORT_KEY = next(idx)
-    MDR_TEXT_KEY = next(idx)
-    TEXT_TYPE_CODE = next(idx)
-    PATIENT_SEQUENCE_NUMBER = next(idx)
-    DATE_REPORT = next(idx)
-    FOI_TEXT = next(idx)
-    maude_data = pre_fill(maude_data, FOI_TEXT)
+def parse_foitext(path: pathlib.Path, maude_data: MaudeData, header: list[str]) -> tuple[MaudeData, list[str]]:
+    REPORT_KEY = 0
     change_file = None
     header_add: list[str] = []
+    new_data: MaudeData = {}
     print("Searching for foitext files")
     for file in path.iterdir():
         if "Change" in file.name.upper():
@@ -242,23 +124,22 @@ def parse_foitext(
                 i = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
                 first = i.readline()
                 if not header_add:
-                    header_add = (
-                        first.decode("utf-8", errors="backslashreplace").rstrip("\r\n").split("|")[MDR_TEXT_KEY:]
-                    )
+                    header_add = first.decode("utf-8", errors="backslashreplace").rstrip("\r\n").split("|")[1:]
                 for line in iter(i.readline, b""):
                     try:
                         split_line = line.decode("utf-8", errors="backslashreplace").rstrip("\r\n").split("|")
-                        key = line[MDR_REPORT_KEY]
+                        key = split_line[REPORT_KEY]
                         if key in maude_data:
-                            maude_data[key][MDR_TEXT_KEY] += f"{split_line[MDR_TEXT_KEY]}"
-                            maude_data[key][TEXT_TYPE_CODE] += f"{split_line[TEXT_TYPE_CODE]}"
-                            maude_data[key][PATIENT_SEQUENCE_NUMBER] += f"{split_line[PATIENT_SEQUENCE_NUMBER]}"
-                            maude_data[key][DATE_REPORT] += f"{split_line[DATE_REPORT]}"
-                            maude_data[key][FOI_TEXT] += f"{split_line[FOI_TEXT]}"
+                            new_data[key] = split_line[1:]
 
                     except IndexError:
                         # TODO: add some error logging here so we aren't failing silently.
                         pass
+    # fill missing information
+    keys_to_update = maude_data.keys() - new_data.keys()
+    size = len(header_add) - 1
+    new_data = fill_blank_data(new_data, size, keys_to_update)
+
     if change_file:
         with open(change_file, "r") as f:
             print(f"reading file {change_file.name}")
@@ -267,16 +148,14 @@ def parse_foitext(
             for line in iter(i.readline, b""):
                 try:
                     split_line = line.decode("utf-8", errors="backslashreplace").rstrip("\r\n").split("|")
-                    key = split_line[MDR_REPORT_KEY]
+                    key = split_line[REPORT_KEY]
                     if key in maude_data:
-                        maude_data[key][MDR_TEXT_KEY] += f"\nChange:\n{split_line[MDR_TEXT_KEY]}"
-                        maude_data[key][TEXT_TYPE_CODE] += f"\nChange:\n{split_line[TEXT_TYPE_CODE]}"
-                        maude_data[key][PATIENT_SEQUENCE_NUMBER] += f"\nChange:\n{split_line[PATIENT_SEQUENCE_NUMBER]}"
-                        maude_data[key][DATE_REPORT] += f"\nChange:\n{split_line[DATE_REPORT]}"
-                        maude_data[key][FOI_TEXT] += f"\nChange:\n{split_line[FOI_TEXT]}"
+                        for x in range(1, len(split_line)):
+                            new_data[key][x] += f"\nChange:\n{split_line[x]}"
                 except IndexError:
                     # TODO: add some error logging here so we aren't failing silently.
                     pass
+    maude_data = extend_data(maude_data, new_data)
     header.extend(header_add)
     return maude_data, header
 
@@ -294,6 +173,14 @@ def parse_patient_codes(patient_codes_file: pathlib.Path) -> dict[str, str]:
             problem = problem.lstrip('"').rstrip('"')  # more MAUDE weirdness.
             patient_codes[code] = problem
     return patient_codes
+
+
+def parse_patient_problems(
+    patient_problems_file: pathlib.Path, maude_data: MaudeData, header: list[str], patient_codes: dict[str, str]
+) -> tuple[MaudeData, list[str]]:
+    thing: MaudeData = {}
+    other: list[str] = []
+    return (thing, other)
 
 
 def print_help():
