@@ -4,7 +4,9 @@ import mmap
 import pathlib
 
 # type aliases
-MaudeData = dict[int, list[str]]
+MaudeData = dict[int, list[bytes]]
+Header = list[bytes]
+PatientCodes = dict[bytes, bytes]
 
 
 def main(args: list):
@@ -16,7 +18,7 @@ def main(args: list):
         print_help()
         print_long_help()
         exit(0)
-    product_codes = set(args)
+    product_codes = {bytes(arg, encoding="utf-8") for arg in args}
     here = pathlib.Path(".")
     data_dir = here / "mdr-data-files"
     device_dir = data_dir / "device"
@@ -35,7 +37,7 @@ def main(args: list):
     exit(0)
 
 
-def length_check(maude_data: MaudeData, header: list[str]) -> None:
+def length_check(maude_data: MaudeData, header: Header) -> None:
     for key in maude_data:
         try:
             assert len(header) == len(maude_data[key])
@@ -62,7 +64,7 @@ def fill_blank_data(new_data: MaudeData, size: int, keys_to_update: set) -> Maud
     or if a report key is missing a particular bit of information.
     """
     for k in keys_to_update:
-        new_data[k] = [""] * size
+        new_data[k] = [b""] * size
     return new_data
 
 
@@ -72,11 +74,12 @@ def extend_data(maude_data: MaudeData, new_data: MaudeData) -> MaudeData:
     return maude_data
 
 
-def parse_device_files(path: pathlib.Path, product_codes: set[str]) -> tuple[MaudeData, list[str]]:
+def parse_device_files(path: pathlib.Path, product_codes: set[bytes]) -> tuple[MaudeData, Header]:
     # I thought about doing this dynamically, but screw it.
     # I'll fix it later if it becomes a problem.
     REPORT_KEY = 0
     PRODUCT_CODE = 25
+    RN = -2
     change_file = None
     header = []
     line_len: int = -1
@@ -88,51 +91,51 @@ def parse_device_files(path: pathlib.Path, product_codes: set[str]) -> tuple[Mau
         elif not "DEVICE" in file.name.upper():
             print(f"Skipping non-device file {file.name}")
         else:
-            with open(file, "r") as f:
+            with open(file, "rb") as f:
                 print(f"reading file {file.name}")
-                with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as i:
-                    first = i.readline()
-                    if not header:
-                        header = first.decode("utf-8", errors="backslashreplace").rstrip("\r\n").split("|")
-                        line_len = len(header)
-                    for line in iter(i.readline, b""):
-                        split_line = line.decode("utf-8", errors="backslashreplace").rstrip("\r\n").split("|")
-                        if len(split_line) != line_len:
-                            continue  # ditch malformed lines.
-                        # TODO: figure out if try/except is faster than explict checking
-                        if split_line[PRODUCT_CODE] in product_codes:
-                            try:
-                                key = int(split_line[REPORT_KEY])
-                                maude_data[key] = split_line
-                            except ValueError:
-                                # sometimes the thing in the leftmost column isn't a number.
-                                # TODO: add some error logging here so we aren't failing siletly.
-                                pass
-        if change_file:
-            with open(change_file, "r") as f:
-                print(f"reading file {change_file.name}")
-                with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as i:
-                    i.readline()
-                    for line in iter(i.readline, b""):
-                        split_line = line.decode("utf-8", errors="backslashreplace").rstrip("\r\n").split("|")
-                        if len(split_line) != line_len:
-                            continue  # ditch malformed lines.
+                first = f.readline()
+                if not header:
+                    header = first[:RN].split(b"|")
+                    line_len = len(header)
+                for line in f:
+                    split_line = line[:RN].split(b"|")
+                    if len(split_line) != line_len:
+                        continue  # ditch malformed lines.
+                    # TODO: figure out if try/except is faster than explict checking
+                    if split_line[PRODUCT_CODE] in product_codes:
                         try:
                             key = int(split_line[REPORT_KEY])
-                            if key in maude_data:
-                                for x in range(1, line_len):
-                                    maude_data[key][x - 1] += f"\nChange:\n{split_line[x]}"
+                            maude_data[key] = split_line
                         except ValueError:
-                            # TODO: add some error logging here so we aren't failing siletly?
+                            # sometimes the thing in the leftmost column isn't a number.
+                            # TODO: add some error logging here so we aren't failing siletly.
                             pass
+        if change_file:
+            with open(change_file, "rb") as f:
+                print(f"reading file {change_file.name}")
+                f.readline()
+                for line in f:
+                    split_line = line[:RN].split(b"|")
+                    if len(split_line) != line_len:
+                       continue  # ditch malformed lines.
+                    try:
+                        key = int(split_line[REPORT_KEY])
+                        if key in maude_data:
+                            for x in range(1, line_len):
+                                byte_string = b"\nChange:\n" + split_line[x]
+                                maude_data[key][x - 1] += byte_string
+                    except ValueError:
+                        # TODO: add some error logging here so we aren't failing siletly?
+                        pass
 
     return maude_data, header
 
 
-def parse_foitext(path: pathlib.Path, maude_data: MaudeData, header: list[str]) -> tuple[MaudeData, list[str]]:
+def parse_foitext(path: pathlib.Path, maude_data: MaudeData, header: Header) -> tuple[MaudeData, Header]:
     REPORT_KEY = 0
+    RN = -2
     change_file = None
-    header_add: list[str] = []
+    header_add: Header = []
     new_data: MaudeData = {}
     line_len: int = -1
     print("Searching for foitext files")
@@ -142,25 +145,24 @@ def parse_foitext(path: pathlib.Path, maude_data: MaudeData, header: list[str]) 
         elif not "foitext" in file.name:
             print(f"Skipping non-foitext file: {file.name}")
         else:
-            with open(file, "r") as f:
+            with open(file, "rb") as f:
                 print(f"reading file {file.name}")
-                with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as i:
-                    first = i.readline()
-                    if not header_add:
-                        this_header = first.decode("utf-8", errors="backslashreplace").rstrip("\r\n").split("|")
-                        line_len = len(this_header)
-                        header_add = this_header[1:]
-                    for line in iter(i.readline, b""):
-                        split_line = line.decode("utf-8", errors="backslashreplace").rstrip("\r\n").split("|")
-                        if len(split_line) != line_len:
-                            continue
-                        try:
-                            key = int(split_line[REPORT_KEY])
-                            if key in maude_data:
-                                new_data[key] = split_line[1:]
-                        except ValueError:
-                            # TODO: Error logging.
-                            pass
+                first = f.readline()
+                if not header_add:
+                    this_header = first[:RN].split(b"|")
+                    line_len = len(this_header)
+                    header_add = this_header[1:]
+                for line in f:
+                    split_line = line[:RN].split(b"|")
+                    if len(split_line) != line_len:
+                        continue
+                    try:
+                        key = int(split_line[REPORT_KEY])
+                        if key in maude_data:
+                            new_data[key] = split_line[1:]
+                    except ValueError:
+                        # TODO: Error logging.
+                        pass
 
     # fill missing information
     keys_to_update = maude_data.keys() - new_data.keys()
@@ -168,45 +170,44 @@ def parse_foitext(path: pathlib.Path, maude_data: MaudeData, header: list[str]) 
     new_data = fill_blank_data(new_data, size, keys_to_update)
 
     if change_file:
-        with open(change_file, "r") as f:
+        with open(change_file, "rb") as f:
             print(f"reading file {change_file.name}")
-            with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as i:
-                first = i.readline()
-                for line in iter(i.readline, b""):
-                    split_line = line.decode("utf-8", errors="backslashreplace").rstrip("\r\n").split("|")
-                    if len(split_line) != line_len:
-                        continue
-                    try:
-                        key = int(split_line[REPORT_KEY])
-                        if key in maude_data:
-                            for x in range(1, line_len):
-                                new_data[key][x - 1] += f"\nChange:\n{split_line[x]}"
-                    except ValueError:
-                        # TODO: Error logging.
-                        pass
+            first = f.readline()
+            for line in f:
+                split_line = line[:RN].split(b"|")
+                if len(split_line) != line_len:
+                    continue
+                try:
+                    key = int(split_line[REPORT_KEY])
+                    if key in maude_data:
+                        for x in range(1, line_len):
+                            byte_string = b"\nChange:\n" + split_line[x]
+                            new_data[key][x - 1] += byte_string
+                except ValueError:
+                    # TODO: Error logging.
+                    pass
     maude_data = extend_data(maude_data, new_data)
     header.extend(header_add)
     return maude_data, header
 
 
-def parse_patient_codes(patient_codes_file: pathlib.Path) -> dict[str, str]:
+def parse_patient_codes(patient_codes_file: pathlib.Path) -> PatientCodes:
+    RN = -2
     patient_codes = {}
     print(f"reading file {patient_codes_file.name}")
-    with open(patient_codes_file, "r") as f:
-        with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as i:
-            for line in iter(i.readline, b""):
-                line = line.decode("utf-8", errors="backslashreplace").rstrip("\r\n")
-                idx = line.find(",")
-                code = line[:idx]
-                problem = line[idx + 1 :]  # skip the comma
-                problem = problem.lstrip('"').rstrip('"')  # more MAUDE weirdness.
-                patient_codes[code] = problem
+    with open(patient_codes_file, "rb") as f:
+        for line in f:
+            line = line[:RN]
+            idx = line.find(b",")
+            code = line[:idx]
+            problem = line[idx + 1 :]  # skip the comma
+            problem = problem.lstrip(b'"').rstrip(b'"')  # more MAUDE weirdness.
+            patient_codes[code] = problem
     return patient_codes
 
 
 def parse_patient_problems(
-    path: pathlib.Path, maude_data: MaudeData, header: list[str], patient_codes: dict[str, str]
-) -> tuple[MaudeData, list[str]]:
+    path: pathlib.Path, maude_data: MaudeData, header: Header, patient_codes: PatientCodes) -> tuple[MaudeData, Header]:
     """
     The patientproblemcode.txt file is weird in a few ways.
     1)  the report keys are decimal instead of ints
@@ -219,40 +220,41 @@ def parse_patient_problems(
     PROBLEM_CODE = 2
     SPACE = 0
     DOT_ZERO = -2
+    RN = -2
     new_data: MaudeData = {}
-    header_add: list[str] = []
+    header_add: Header = []
     line_len: int = -1
     print(f"Seaching for patient files")
     for file in path.iterdir():
         if not "patient" in file.name.lower():
             print(f"skipping non-patient file {file.name}")
         else:
-            with open(file, "r") as f:
+            with open(file, "rb") as f:
                 print(f"reading file {file.name}")
-                with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as i:
-                    first = i.readline()
-                    # there should only ever be one patientproblemcode.txt file
-                    # so this check is unnecessary, but the MAUDE database is funny sometimes
-                    # so guard against changes in the future.
-                    if not header_add:
-                        this_header = first.decode("utf-8", errors="backslashreplace").rstrip("\r\n").split("|")
-                        line_len = len(this_header)
-                        header_add = this_header[1:]
-                    for line in iter(i.readline, b""):
-                        split_line = line.decode("utf-8", errors="backslachreplace").rstrip("\r\n").split("|")
-                        if len(split_line) != line_len:
-                            continue
-                        try:
-                            # slicing is faster than int(float(string))
-                            key = int(split_line[REPORT_KEY][SPACE:DOT_ZERO])
-                            if key in maude_data:
-                                split_line[PROBLEM_CODE] = patient_codes[split_line[PROBLEM_CODE]]
-                                if key in new_data:
-                                    for x in range(1, line_len):
-                                        new_data[key][x - 1] += f"\n{split_line[x]}"
-                                else:
-                                    new_data[key] = split_line[1:]
-                        except IndexError:
+                first = f.readline()
+                # there should only ever be one patientproblemcode.txt file
+                # so this check is unnecessary, but the MAUDE database is funny sometimes
+                # so guard against changes in the future.
+                if not header_add:
+                    this_header = first[:RN].split(b"|")
+                    line_len = len(this_header)
+                    header_add = this_header[1:]
+                for line in f:
+                    split_line = line[:RN].split(b"|")
+                    if len(split_line) != line_len:
+                        continue
+                    try:
+                        # slicing is faster than int(float(string))
+                        key = int(split_line[REPORT_KEY][SPACE:DOT_ZERO])
+                        if key in maude_data:
+                            split_line[PROBLEM_CODE] = patient_codes[split_line[PROBLEM_CODE]]
+                            if key in new_data:
+                                for x in range(1, line_len):
+                                    byte_string = b"\n" + split_line[x]
+                                    new_data[key][x - 1] += byte_string
+                            else:
+                                new_data[key] = split_line[1:]
+                    except IndexError:
                             # TODO: add some error logging or something.
                             pass
     # fill in the blanks
