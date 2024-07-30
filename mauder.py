@@ -1,6 +1,5 @@
 from sys import argv, exit
 from time import time
-import mmap
 import pathlib
 
 # type aliases
@@ -38,6 +37,12 @@ def main(args: list):
 
 
 def length_check(maude_data: MaudeData, header: Header) -> None:
+    """
+    Sanity check to make sure that the data is well formed.  The header and
+    the parsed MAUDE data were getting out of sync during development, so
+    run this function any time you mutate the header or maude_data to see if
+    things are still aligned.
+    """
     for key in maude_data:
         try:
             assert len(header) == len(maude_data[key])
@@ -48,6 +53,10 @@ def length_check(maude_data: MaudeData, header: Header) -> None:
 
 
 def dump_key(maude_data: MaudeData, header: list[str], key: int = 0) -> None:
+    """
+    Helper function for printing out an MDR record.  If no MDR key is provided
+    the first key from the maude_data is selected.
+    """
     if not key:
         for key in maude_data:
             break
@@ -69,12 +78,23 @@ def fill_blank_data(new_data: MaudeData, size: int, keys_to_update: set) -> Maud
 
 
 def extend_data(maude_data: MaudeData, new_data: MaudeData) -> MaudeData:
+    """
+    This is more of the MAUDE files being wonky at times.  There are no guarentees
+    that a key that is parsed from a given set of data is going to show up in the
+    device files.  So as new data is parsed, we keep it separate and then combine
+    with the original data after.
+    """
     for key in maude_data.keys() & new_data.keys():
         maude_data[key].extend(new_data[key])
     return maude_data
 
 
 def parse_device_files(path: pathlib.Path, product_codes: set[bytes]) -> tuple[MaudeData, Header]:
+    """
+    Searches through a folder and parses out data from device files for the product codes indicated.
+    The MAUDE data can be screwy so we have to check for line length and deal with data showing
+    up in the wrong locations.  The Device files seem to be the worst about malformed data.
+    """
     # I thought about doing this dynamically, but screw it.
     # I'll fix it later if it becomes a problem.
     REPORT_KEY = 0
@@ -117,7 +137,7 @@ def parse_device_files(path: pathlib.Path, product_codes: set[bytes]) -> tuple[M
                 for line in f:
                     split_line = line[:RN].split(b"|")
                     if len(split_line) != line_len:
-                       continue  # ditch malformed lines.
+                        continue  # ditch malformed lines.
                     try:
                         key = int(split_line[REPORT_KEY])
                         if key in maude_data:
@@ -132,6 +152,11 @@ def parse_device_files(path: pathlib.Path, product_codes: set[bytes]) -> tuple[M
 
 
 def parse_foitext(path: pathlib.Path, maude_data: MaudeData, header: Header) -> tuple[MaudeData, Header]:
+    """
+    This parses out the foi text which includes all the narrative data (reporter and manufacturer lies)
+    from the MAUDE records.  Missing records is fairly common here, so we have to populate blank data
+    whenever there is a device record without corresponding foi data.
+    """
     REPORT_KEY = 0
     RN = -2
     change_file = None
@@ -192,6 +217,10 @@ def parse_foitext(path: pathlib.Path, maude_data: MaudeData, header: Header) -> 
 
 
 def parse_patient_codes(patient_codes_file: pathlib.Path) -> PatientCodes:
+    """
+    Patient outcomes are encoded for reasons that are beyond me.  This creates
+    the lookup for turning a patient code into the human readable translation.
+    """
     RN = -2
     patient_codes = {}
     print(f"reading file {patient_codes_file.name}")
@@ -207,8 +236,11 @@ def parse_patient_codes(patient_codes_file: pathlib.Path) -> PatientCodes:
 
 
 def parse_patient_problems(
-    path: pathlib.Path, maude_data: MaudeData, header: Header, patient_codes: PatientCodes) -> tuple[MaudeData, Header]:
+    path: pathlib.Path, maude_data: MaudeData, header: Header, patient_codes: PatientCodes
+) -> tuple[MaudeData, Header]:
     """
+    This parses the patient problems (outcomes) for the maude data.  Patient outcomes
+    are all splatted into a single file instead of being broken up by year.
     The patientproblemcode.txt file is weird in a few ways.
     1)  the report keys are decimal instead of ints
     2)  report keys show up multiple times in the file because
@@ -255,8 +287,8 @@ def parse_patient_problems(
                             else:
                                 new_data[key] = split_line[1:]
                     except IndexError:
-                            # TODO: add some error logging or something.
-                            pass
+                        # TODO: add some error logging or something.
+                        pass
     # fill in the blanks
     keys_to_update = maude_data.keys() - new_data.keys()
     size = len(header_add)
