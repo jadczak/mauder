@@ -52,7 +52,7 @@ def length_check(maude_data: MaudeData, header: Header) -> None:
             exit(0)
 
 
-def dump_key(maude_data: MaudeData, header: list[str], key: int = 0) -> None:
+def dump_key(maude_data: MaudeData, header: Header, key: int = 0) -> None:
     """
     Helper function for printing out an MDR record.  If no MDR key is provided
     the first key from the maude_data is selected.
@@ -61,7 +61,7 @@ def dump_key(maude_data: MaudeData, header: list[str], key: int = 0) -> None:
         for key in maude_data:
             break
     for h, v in zip(header, maude_data[key]):
-        print(f"{h:35}{v}")
+        print(f"{str(h):35}{str(v)}")
 
 
 def fill_blank_data(new_data: MaudeData, size: int, keys_to_update: set) -> MaudeData:
@@ -104,6 +104,10 @@ def parse_device_files(path: pathlib.Path, product_codes: set[bytes]) -> tuple[M
     header = []
     line_len: int = -1
     maude_data: MaudeData = {}
+    fast_codes: bool = False
+    if len(product_codes) < 3:
+        fast_codes = True
+        product_codes = {b"|" + pc + b"|" for pc in product_codes}
     print("Searching for Device files")
     for file in path.iterdir():
         if "change" in file.name.lower():
@@ -111,42 +115,62 @@ def parse_device_files(path: pathlib.Path, product_codes: set[bytes]) -> tuple[M
         elif not "DEVICE" in file.name.upper():
             print(f"Skipping non-device file {file.name}")
         else:
-            with open(file, "rb") as f:
-                print(f"reading file {file.name}")
-                first = f.readline()
-                if not header:
-                    header = first[:RN].split(b"|")
-                    line_len = len(header)
-                for line in f:
-                    split_line = line[:RN].split(b"|")
-                    if len(split_line) != line_len:
-                        continue  # ditch malformed lines.
-                    # TODO: figure out if try/except is faster than explict checking
-                    if split_line[PRODUCT_CODE] in product_codes:
-                        try:
-                            key = int(split_line[REPORT_KEY])
-                            maude_data[key] = split_line
-                        except ValueError:
-                            # sometimes the thing in the leftmost column isn't a number.
-                            # TODO: add some error logging here so we aren't failing siletly.
-                            pass
-        if change_file:
-            with open(change_file, "rb") as f:
-                print(f"reading file {change_file.name}")
-                f.readline()
-                for line in f:
-                    split_line = line[:RN].split(b"|")
-                    if len(split_line) != line_len:
-                        continue  # ditch malformed lines.
-                    try:
-                        key = int(split_line[REPORT_KEY])
-                        if key in maude_data:
-                            for x in range(1, line_len):
-                                byte_string = b"\nChange:\n" + split_line[x]
-                                maude_data[key][x - 1] += byte_string
-                    except ValueError:
-                        # TODO: add some error logging here so we aren't failing siletly?
-                        pass
+            if fast_codes:
+                with open(file, "rb") as f:
+                    print(f"reading file {file.name}")
+                    first = f.readline()
+                    if not header:
+                        header = first[:RN].split(b"|")
+                        line_len = len(header)
+                    for line in f:
+                        for product_code in product_codes:
+                            if product_code in line:
+                                split_line = line[:RN].split(b"|")
+                                if len(split_line) != line_len:
+                                    continue  # ditch malformed lines.
+                                try:
+                                    key = int(split_line[REPORT_KEY])
+                                    maude_data[key] = split_line
+                                except ValueError:
+                                    # very seldom, the thing in the leftmost column isn't a number.
+                                    # TODO: add some error logging here so we aren't failing siletly.
+                                    pass
+            else:
+                with open(file, "rb") as f:
+                    print(f"reading file {file.name}")
+                    first = f.readline()
+                    if not header:
+                        header = first[:RN].split(b"|")
+                        line_len = len(header)
+                    for line in f:
+                        split_line = line[:RN].split(b"|")
+                        if len(split_line) != line_len:
+                            continue
+                        if split_line[PRODUCT_CODE] in product_codes:
+                            try:
+                                key = int(split_line[REPORT_KEY])
+                                maude_data[key] = split_line
+                            except ValueError:
+                                # TODO: add errors
+                                pass
+    if change_file:
+        with open(change_file, "rb") as f:
+            print(f"reading file {change_file.name}")
+            f.readline()
+            for line in f:
+                split_line = line[:RN].split(b"|")
+                if len(split_line) != line_len:
+                    continue  # ditch malformed lines.
+                try:
+                    key = int(split_line[REPORT_KEY])
+                    if key in maude_data:
+                        for x in range(1, line_len):
+                            byte_string = b"\nChange:\n" + split_line[x]
+                            maude_data[key][x - 1] += byte_string
+                except ValueError:
+                    print("error")
+                    # TODO: add some error logging here so we aren't failing siletly?
+                    pass
 
     return maude_data, header
 
