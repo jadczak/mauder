@@ -55,8 +55,8 @@ Current performance on a i7-13700k with a Samsung 980 PRO NVMe reading data from
 
 Product code OYC
 
-python 3.12 - 19.5 seconds
-pypy   3.10 - 18.2 seconds
+python 3.12 - 18.0 seconds
+pypy   3.10 - 17.0 seconds
 
 Dataset retrieved June 2024:
 - DEVICE2022.txt
