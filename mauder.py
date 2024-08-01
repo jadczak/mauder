@@ -1,8 +1,10 @@
 from sys import argv, exit
 from time import time
+import argparse
 import multiprocessing
 import pathlib
 import psutil
+import textwrap
 
 # type aliases
 MaudeData = dict[int, list[bytes]]
@@ -12,30 +14,31 @@ PatientCodes = dict[bytes, bytes]
 
 def main(args: list):
     start = time()
-    if not args:
-        print_help()
-        exit(0)
-    if "-h" in args:
-        print_help()
+    arguments = parse_args(args)
+    if arguments.more:
         print_long_help()
+        parse_args(["-h"])
         exit(0)
-    product_codes = {bytes(arg, encoding="utf-8") for arg in args}
-    here = pathlib.Path(".")
-    data_dir = here / "mdr-data-files"
-    device_dir = data_dir / "device"
-    foitext_dir = data_dir / "foitext"
-    patient_codes_file = data_dir / "patientproblemdata/patientproblemcodes.csv"
-    patient_problem_dir = data_dir / "patientproblemcode"
-    n_chunks = psutil.cpu_count(logical=False)
-    maude_data, header = parse_device_files(device_dir, product_codes, n_chunks)
-    maude_data, header = parse_foitext(foitext_dir, maude_data, header, n_chunks)
-    length_check(maude_data, header)
-    patient_codes = parse_patient_codes(patient_codes_file)
-    maude_data, header = parse_patient_problems(patient_problem_dir, maude_data, header, patient_codes, n_chunks)
-    length_check(maude_data, header)
-    end = time()
-    print(f"Elapsed time: {end - start}")
-    # dump_key(maude_data, header)
+    if not any(vars(arguments).values()):
+        parse_args(["-h"])
+    if arguments.codes:
+        product_codes = {bytes(arg, encoding="utf-8") for arg in arguments.codes}
+        here = pathlib.Path(".")
+        data_dir = here / "mdr-data-files"
+        device_dir = data_dir / "device"
+        foitext_dir = data_dir / "foitext"
+        patient_codes_file = data_dir / "patientproblemdata/patientproblemcodes.csv"
+        patient_problem_dir = data_dir / "patientproblemcode"
+        n_chunks = psutil.cpu_count(logical=False)
+        maude_data, header = parse_device_files(device_dir, product_codes, n_chunks)
+        maude_data, header = parse_foitext(foitext_dir, maude_data, header, n_chunks)
+        length_check(maude_data, header)
+        patient_codes = parse_patient_codes(patient_codes_file)
+        maude_data, header = parse_patient_problems(patient_problem_dir, maude_data, header, patient_codes, n_chunks)
+        length_check(maude_data, header)
+        end = time()
+        print(f"Elapsed time: {end - start}")
+        # dump_key(maude_data, header)
     exit(0)
 
 
@@ -146,6 +149,7 @@ def parse_device_files(path: pathlib.Path, product_codes: set[bytes], n_chunks: 
         elif not "DEVICE" in file.name.upper():
             print(f"Skipping non-device file {file.name}")
         else:
+            print(f"reading device file: {file.name}")
             if not header:
                 header = get_header(file)
                 line_len = len(header)
@@ -159,6 +163,7 @@ def parse_device_files(path: pathlib.Path, product_codes: set[bytes], n_chunks: 
                 maude_data.update(chunk_result)
 
     if change_file:
+        print(f"reading device file: {change_file.name}")
         locations = chunk_file(change_file, n_chunks)
         tasks = []
         maude_keys = set(maude_data.keys())
@@ -288,13 +293,14 @@ def parse_foitext(path: pathlib.Path, maude_data: MaudeData, header: Header, n_c
     new_data: MaudeData = {}
     line_len: int = -1
     maude_keys: set[int] = set(maude_data.keys())  # can't pickle dict_keys object for starmap.
-    print("Searching for foitext files")
+    print("Searching for foi text files")
     for file in path.iterdir():
         if "change" in file.name.lower():
             change_file = file
         elif not "foitext" in file.name:
             print(f"Skipping non-foitext file: {file.name}")
         else:
+            print(f"reading foi text file: {file.name}")
             if not header_add:
                 this_header = get_header(file)
                 line_len = len(this_header)
@@ -314,6 +320,7 @@ def parse_foitext(path: pathlib.Path, maude_data: MaudeData, header: Header, n_c
     new_data = fill_blank_data(new_data, size, keys_to_update)
 
     if change_file:
+        print(f"reading foi text file: {change_file.name}")
         locations = chunk_file(change_file, n_chunks)
         tasks = []
         for start, end in locations:
@@ -338,7 +345,7 @@ def parse_patient_codes(patient_codes_file: pathlib.Path) -> PatientCodes:
     """
     RN = -2
     patient_codes = {}
-    print(f"reading file {patient_codes_file.name}")
+    print(f"reading patient code file: {patient_codes_file.name}")
     with open(patient_codes_file, "rb") as f:
         for line in f:
             line = line[:RN]
@@ -366,7 +373,7 @@ def parse_patient_problems(
         if not "patient" in file.name.lower():
             print(f"skipping non-patient file {file.name}")
         else:
-            print(f"reading file {file.name}")
+            print(f"reading patient problem file: {file.name}")
             if not header_add:
                 this_header = get_header(file)
                 line_len = len(this_header)
@@ -437,61 +444,63 @@ def parse_patient_chunk(
     return new_data
 
 
-def print_help():
-    print("Usage: python mauder.py [DEVICE CODES]")
-    print()
-    print("\t-h")
-    print("\t\tPrints the extended help.")
-    print()
-    print("Example:")
-    print("\tpython mauder.py OYC LGZ QFG")
-    print("\tThis will search through the avilable database files for all complaints")
-    print("\tcontaining any of the product codes: OYC LGZ or QFG")
+def parse_args(args: list[str]) -> argparse.Namespace:
+    description = textwrap.dedent(
+        """\
+    Example:
+        python mauder.py -c OYC LGZ QFG
+        This will search through the available database files for all complaints
+        containing any of the product codes: OYC, LGZ or QFG
+    """
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="mauder.py", formatter_class=argparse.RawDescriptionHelpFormatter, description=description
+    )
+    parser.add_argument("-c", "--codes", nargs="+", default=[], type=str, dest="codes")
+    parser.add_argument(
+        "-m", "--more", help="Prints the extended help", default=False, action="store_true", dest="more"
+    )
+    return parser.parse_args(args)
 
 
 def print_long_help():
-    print()
-    print("This utility searches the mrd-data-files directory for all product codes")
-    print("provided, aggregating useful information and exporting it as an excel")
-    print("document and also as a python pickle file containing a pandas dataframe")
-    print("of the aggregated information")
-    print()
-    print("Maude data can be downloaded from the FDA's website in at the following location:")
-    print(
-        "https://www.fda.gov/medical-devices/medical-device-reporting-mdr-how-report-medical-device-problems/mdr-data-files"
+    long_help = textwrap.dedent(
+        """\
+    This utility searches the mrd-data-files directory for all product codes
+    provided, aggregating useful information and exporting it as an excel
+    document and also as a python pickle file containing a pandas dataframe
+    of the aggregated information
+
+    Maude data can be downloaded from the FDA's website in at the following location:
+
+    https://www.fda.gov/medical-devices/medical-device-reporting-mdr-how-report-medical-device-problems/mdr-data-files
+
+    for the utility to work files need to be placed in the skeleton director as follows:
+    .
+    └── mdr-data-files/
+        ├── device
+        |   ├── DEVICE.txt
+        |   ├── DEVICE2023.txt
+        |   ├── DEVICE2022.txt
+        |   ├── ...
+        |   └── DEVICEChange.txt
+        ├── foitext
+        |   ├── foitext.txt
+        |   ├── foitext2023.txt
+        |   ├── ...
+        |   └── foitextChange.txt
+        ├── patientproblemcode
+        |   └── patientproblemcode.txt
+        └── patientproblemdata
+            └── patientproblemcodes.csv
+
+    NOTE: the 'patientproblemdata.zip' archive contains the file named 'patientproblemcodes.csv'.
+
+    This utility will scan all available files.  Only include data as far back as you need or
+    it may take a long time to run."""
     )
-    print("for the utility to work files need to be placed in the skeleton director as follows:")
-    print()
-    print("\t.")
-    print("\t└── mdr-data-files/")
-    print("\t    ├── device")
-    print("\t    |   ├── DEVICE.txt")
-    print("\t    |   ├── DEVICE2023.txt")
-    print("\t    |   ├── DEVICE2022.txt")
-    print("\t    |   ├── ...")
-    print("\t    |   └── DEVICEChange.txt")
-    print("\t    ├── deviceproblemcodes")
-    print("\t    |   └── deviceproblemcodes.csv")
-    print("\t    ├── foitext")
-    print("\t    |   ├── foitext.txt")
-    print("\t    |   ├── foitext2023.txt")
-    print("\t    |   ├── ...")
-    print("\t    |   └── foitextChange.txt")
-    print("\t    ├── mdrfoi")
-    print("\t    |   └── [APJ] Maybe not needed?")
-    print("\t    ├── patient")
-    print("\t    |   ├── patient.txt")
-    print("\t    |   ├── ...")
-    print("\t    |   └── patientchange.txt")
-    print("\t    ├── patientproblemcode")
-    print("\t    |   └── patientproblemcode.txt")
-    print("\t    └── patientproblemdata")
-    print("\t        └── patientproblemcodes.csv")
-    print()
-    print("NOTE: the 'patientproblemdata.zip' archive contains the file named 'patientproblemcodes.csv'.")
-    print()
-    print("This utility will scan all available files.  Only include data as far back as you need or")
-    print("it may take a long time to run.")
+    print(long_help)
 
 
 if __name__ == "__main__":
