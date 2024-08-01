@@ -25,12 +25,6 @@ The data downloaded from the website should be placed as indicated in the struct
     |   ├── foitext2023.txt
     |   ├── ...
     |   └── foitextChange.txt
-    ├── mdrfoi
-    |   └── [APJ] Maybe not needed?
-    ├── patient
-    |   ├── patient.txt [APJ] Maybe not needed?
-    |   ├── ...
-    |   └── patientchange.txt
     ├── patientproblemcode
     |   └── patientproblemcode.txt
     └── patientproblemdata
@@ -55,9 +49,11 @@ Current performance on a i7-13700k with a Samsung 980 PRO NVMe reading data from
 
 Product code OYC
 
-python 3.12 - 18.0 seconds
+python 3.12 - 3.3 seconds
 
-pypy   3.10 - 17.0 seconds
+pypy   3.10 - 6.0 seconds
+
+pypy performance took a hit once multiprocessing was enabled.  Scalene doesn't work with multiprocessing out of the box, so a different profiler is needed to figure out where there is time to be gained at this point.  Using 16 vs 8 cores doesn't seem to matter, perhaps there is too much IO contention now.  Maybe instead of reading line by line, we start injesting larger chunks of data and deal with the bytes in memory, freeing up time for other processes to use the IO?
 
 Dataset retrieved June 2024:
 - DEVICE2022.txt
