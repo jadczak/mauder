@@ -55,6 +55,13 @@ pypy   3.10 - 6.0 seconds
 
 pypy performance took a hit once multiprocessing was enabled.  Scalene doesn't work with multiprocessing out of the box, so a different profiler is needed to figure out where there is time to be gained at this point.  Using 16 vs 8 cores doesn't seem to matter, perhaps there is too much IO contention now.  Maybe instead of reading line by line, we start injesting larger chunks of data and deal with the bytes in memory, freeing up time for other processes to use the IO?
 
+```
+MODE                TIME (s)            THROUGHPUT GB/s     EFFICIENCY
+Raw Reading         2.600               3.545               100.00%
+File Parsing        3.311               2.785               78.54%
+Multiprocessing pool size: 16
+```
+
 Dataset retrieved June 2024:
 - DEVICE2022.txt
 - DEVICE2023.txt

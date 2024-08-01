@@ -13,32 +13,51 @@ PatientCodes = dict[bytes, bytes]
 
 
 def main(args: list):
-    start = time()
     arguments = parse_args(args)
     if arguments.more:
         print_long_help()
         parse_args(["-h"])
         exit(0)
-    if not any(vars(arguments).values()):
+    if not any(vars(arguments).values()) or arguments.procs < 1:
         parse_args(["-h"])
+
+    start = 0
+    end = 0
+    here = pathlib.Path(".")
+    data_dir = here / "mdr-data-files"
+    device_dir = data_dir / "device"
+    foitext_dir = data_dir / "foitext"
+    patient_codes_file = data_dir / "patientproblemdata/patientproblemcodes.csv"
+    patient_problem_dir = data_dir / "patientproblemcode"
+
     if arguments.codes:
+        if arguments.test:
+            start = time()
         product_codes = {bytes(arg, encoding="utf-8") for arg in arguments.codes}
-        here = pathlib.Path(".")
-        data_dir = here / "mdr-data-files"
-        device_dir = data_dir / "device"
-        foitext_dir = data_dir / "foitext"
-        patient_codes_file = data_dir / "patientproblemdata/patientproblemcodes.csv"
-        patient_problem_dir = data_dir / "patientproblemcode"
-        n_chunks = psutil.cpu_count(logical=False)
+
+        n_chunks = arguments.procs
         maude_data, header = parse_device_files(device_dir, product_codes, n_chunks)
         maude_data, header = parse_foitext(foitext_dir, maude_data, header, n_chunks)
-        length_check(maude_data, header)
         patient_codes = parse_patient_codes(patient_codes_file)
         maude_data, header = parse_patient_problems(patient_problem_dir, maude_data, header, patient_codes, n_chunks)
-        length_check(maude_data, header)
-        end = time()
-        print(f"Elapsed time: {end - start}")
+        if arguments.test:
+            end = time()
         # dump_key(maude_data, header)
+    if arguments.test:
+        total_size, read_time = test_speed([device_dir, foitext_dir, patient_problem_dir, patient_codes_file])
+        read_throughput = total_size / read_time / 2**30
+        read_efficiency = read_throughput / read_throughput
+        parsing_time = end - start
+        parsing_throughput = total_size / parsing_time / 2**30
+        parsing_efficiency = parsing_throughput / read_throughput
+        print()
+        print(f"{'MODE':20}{'TIME (s)':20}{'THROUGHPUT GB/s':20}{'EFFICIENCY':20}")
+        print(f"{'Raw Reading':20}{read_time:<20.3f}{read_throughput:<20.3f}{read_efficiency:<20.2%}")
+        if parsing_time:
+            print(f"{'File Parsing':20}{parsing_time:<20.3f}{parsing_throughput:<20.3f}{parsing_efficiency:<20.2%}")
+            print(f"Multiprocessing pool size: {arguments.procs}")
+        else:
+            print(f"{'N/A':20}{0:20.3f}{0:20.3f}{0:20.2%}")
     exit(0)
 
 
@@ -444,6 +463,34 @@ def parse_patient_chunk(
     return new_data
 
 
+def test_speed(paths: list[pathlib.Path]) -> tuple[int, float]:
+    """
+    Figure out how fast raw reads are of all the files to get an idea
+    of the upper limit of performance on the target machine.
+    """
+    file_size = 0
+    files = []
+    for path in paths:
+        if path.is_file():
+            print(f"TEST: Adding\t{path.name}")
+            file_size += path.stat().st_size
+            files.append(open(path, "rb"))
+        else:
+            for file in path.iterdir():
+                if not ".gitkeep" in file.name:
+                    print(f"TEST: Adding\t{file.name}")
+                    file_size += file.stat().st_size
+                    files.append(open(file, "rb"))
+    start = time()
+    for file in files:
+        file.read()
+    end = time()
+    for file in files:
+        file.close()
+    elapsed = end - start
+    return file_size, elapsed
+
+
 def parse_args(args: list[str]) -> argparse.Namespace:
     description = textwrap.dedent(
         """\
@@ -461,6 +508,10 @@ def parse_args(args: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "-m", "--more", help="Prints the extended help", default=False, action="store_true", dest="more"
     )
+    parser.add_argument(
+        "-t", "--test", help="Tests speed against raw read", default=False, action="store_true", dest="test"
+    )
+    parser.add_argument("-p", "--processes", default=psutil.cpu_count(logical=False), type = int, dest="procs")
     return parser.parse_args(args)
 
 
