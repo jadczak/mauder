@@ -55,9 +55,10 @@ def main(args: list):
         print(f"{'Raw Reading':20}{read_time:<20.3f}{read_throughput:<20.3f}{read_efficiency:<20.2%}")
         if parsing_time:
             print(f"{'File Parsing':20}{parsing_time:<20.3f}{parsing_throughput:<20.3f}{parsing_efficiency:<20.2%}")
-            print(f"Multiprocessing pool size: {arguments.procs}")
+            print(f"{'Multiprocessing pool size':40}{arguments.procs}")
         else:
             print(f"{'N/A':20}{0:20.3f}{0:20.3f}{0:20.2%}")
+        print(f"{'Total size of processed files':40}{total_size / 2**30:.3f} GB")
     exit(0)
 
 

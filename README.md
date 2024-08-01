@@ -18,8 +18,6 @@ The data downloaded from the website should be placed as indicated in the struct
     |   ├── DEVICE2022.txt
     |   ├── ...
     |   └── DEVICEChange.txt
-    ├── deviceproblemcodes
-    |   └── deviceproblemcodes.csv
     ├── foitext
     |   ├── foitext.txt
     |   ├── foitext2023.txt
@@ -61,6 +59,9 @@ Raw Reading         2.600               3.545               100.00%
 File Parsing        3.311               2.785               78.54%
 Multiprocessing pool size: 16
 ```
+
+![CrystalDiskMarkTest](./assets/crystal-disk-mark-speeds.png "CrystalDiskMark 8GB")
+
 
 Dataset retrieved June 2024:
 - DEVICE2022.txt
