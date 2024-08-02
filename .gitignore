@@ -27,5 +27,8 @@ MANIFEST
 **.txt
 **.csv
 
+# output files
+**.xlsx
+
 # scalene files
 profile.*

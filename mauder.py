@@ -1,10 +1,11 @@
 from sys import argv, exit
-from time import time
+from time import time, strftime
 import argparse
 import multiprocessing
 import pathlib
 import psutil
 import textwrap
+import xlsxwriter
 
 # type aliases
 MaudeData = dict[int, list[bytes]]
@@ -23,6 +24,7 @@ def main(args: list):
 
     start = 0
     end = 0
+    write_end = 0
     here = pathlib.Path(".")
     data_dir = here / "mdr-data-files"
     device_dir = data_dir / "device"
@@ -42,7 +44,16 @@ def main(args: list):
         maude_data, header = parse_patient_problems(patient_problem_dir, maude_data, header, patient_codes, n_chunks)
         if arguments.test:
             end = time()
-        # dump_key(maude_data, header)
+        codes = "-".join([c for c in arguments.codes])
+        file = pathlib.Path(f"{strftime("%Y%m%d%H%M%S")}-{codes}.xlsx")
+        maude_data, header = convert_bytes_to_strings(maude_data, header)
+        write_maude_data(file, maude_data, header)
+        if arguments.test:
+            write_end = time()
+    else:
+        print(f"No product codes provided.")
+
+
     if arguments.test:
         total_size, read_time = test_speed([device_dir, foitext_dir, patient_problem_dir, patient_codes_file])
         read_throughput = total_size / read_time / 2**30
@@ -50,16 +61,52 @@ def main(args: list):
         parsing_time = end - start
         parsing_throughput = total_size / parsing_time / 2**30
         parsing_efficiency = parsing_throughput / read_throughput
+        writing_time = write_end - end
+        total_time = write_end - start
         print()
         print(f"{'MODE':20}{'TIME (s)':20}{'THROUGHPUT GB/s':20}{'EFFICIENCY':20}")
         print(f"{'Raw Reading':20}{read_time:<20.3f}{read_throughput:<20.3f}{read_efficiency:<20.2%}")
         if parsing_time:
             print(f"{'File Parsing':20}{parsing_time:<20.3f}{parsing_throughput:<20.3f}{parsing_efficiency:<20.2%}")
             print(f"{'Multiprocessing pool size':40}{arguments.procs}")
+            print(f"{'Time to write excel file':40}{writing_time:.3f}")
+            print(f"{'Total processing time':40}{total_time:.3f}")
         else:
             print(f"{'N/A':20}{0:20.3f}{0:20.3f}{0:20.2%}")
         print(f"{'Total size of processed files':40}{total_size / 2**30:.3f} GB")
+
     exit(0)
+
+
+def convert_bytes_to_strings(maude_data: MaudeData, header: Header) -> tuple[MaudeData, Header]:
+    """
+    excel writers don't allow passing 'errors' values for managing non utf-8 characters.
+    """
+    print("converting bytes to string")
+    for key in maude_data:
+        byte_data = maude_data[key]
+        str_data = [b.decode("utf-8", "ignore") for b in byte_data] # type: ignore
+        maude_data[key] = str_data # type: ignore
+
+    header = [b.decode("utf-8", "ignore") for b in header] # type: ignore
+    return maude_data, header
+
+
+def write_maude_data(file: pathlib.Path, maude_data: MaudeData, header: Header) -> None:
+    """
+    dump maude data to file
+    """
+    print("writing output to disk")
+    total_lines = len(maude_data)
+    workbook = xlsxwriter.Workbook(file)
+    worksheet = workbook.add_worksheet()
+    worksheet.write_row(0, 0, header)
+    for i, key in enumerate(sorted(maude_data), start=1):
+        if i % 10_000 == 0:
+            print(f"writing line {i} of {total_lines}")
+        worksheet.write_row(i, 0, maude_data[key])
+    workbook.close()
+
 
 
 def length_check(maude_data: MaudeData, header: Header) -> None:
