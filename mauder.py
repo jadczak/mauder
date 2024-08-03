@@ -460,7 +460,7 @@ def parse_patient_problems(
     # fill in the blanks
     keys_to_update = maude_keys - new_data.keys()
     size = len(header_add)
-    maude_data = fill_blank_data(maude_data, size, keys_to_update)
+    new_data = fill_blank_data(new_data, size, keys_to_update)
     header.extend(header_add)
     maude_data = extend_data(maude_data, new_data)
     return maude_data, header
