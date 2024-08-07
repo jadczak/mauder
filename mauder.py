@@ -51,8 +51,7 @@ def main(args: list):
         if arguments.test:
             write_end = time()
     else:
-        print(f"No product codes provided.")
-
+        print("No product codes provided.")
 
     if arguments.test:
         total_size, read_time = test_speed([device_dir, foitext_dir, patient_problem_dir, patient_codes_file])
@@ -85,10 +84,10 @@ def convert_bytes_to_strings(maude_data: MaudeData, header: Header) -> tuple[Mau
     print("converting bytes to string")
     for key in maude_data:
         byte_data = maude_data[key]
-        str_data = [b.decode("utf-8", "ignore") for b in byte_data] # type: ignore
-        maude_data[key] = str_data # type: ignore
+        str_data = [b.decode("utf-8", "ignore") for b in byte_data]  # type: ignore
+        maude_data[key] = str_data  # type: ignore
 
-    header = [b.decode("utf-8", "ignore") for b in header] # type: ignore
+    header = [b.decode("utf-8", "ignore") for b in header]  # type: ignore
     return maude_data, header
 
 
@@ -106,7 +105,6 @@ def write_maude_data(file: pathlib.Path, maude_data: MaudeData, header: Header) 
             print(f"writing line {i} of {total_lines}")
         worksheet.write_row(i, 0, maude_data[key])
     workbook.close()
-
 
 
 def length_check(maude_data: MaudeData, header: Header) -> None:
@@ -213,7 +211,7 @@ def parse_device_files(path: pathlib.Path, product_codes: set[bytes], n_chunks: 
     for file in path.iterdir():
         if "change" in file.name.lower():
             change_file = file
-        elif not "DEVICE" in file.name.upper():
+        elif "DEVICE" not in file.name.upper():
             print(f"Skipping non-device file {file.name}")
         else:
             print(f"reading device file: {file.name}")
@@ -364,7 +362,7 @@ def parse_foitext(path: pathlib.Path, maude_data: MaudeData, header: Header, n_c
     for file in path.iterdir():
         if "change" in file.name.lower():
             change_file = file
-        elif not "foitext" in file.name:
+        elif "foitext" not in file.name:
             print(f"Skipping non-foitext file: {file.name}")
         else:
             print(f"reading foi text file: {file.name}")
@@ -418,7 +416,7 @@ def parse_patient_codes(patient_codes_file: pathlib.Path) -> PatientCodes:
             line = line[:RN]
             idx = line.find(b",")
             code = line[:idx]
-            problem = line[idx + 1 :]  # skip the comma
+            problem = line[idx + 1:]  # skip the comma
             problem = problem.lstrip(b'"').rstrip(b'"')  # more MAUDE weirdness.
             patient_codes[code] = problem
     return patient_codes
@@ -435,9 +433,9 @@ def parse_patient_problems(
     header_add: Header = []
     line_len: int = -1
     maude_keys: set[int] = set(maude_data.keys())  # can't pickle dict_keys for starmap.
-    print(f"Seaching for patient files")
+    print("Seaching for patient files")
     for file in path.iterdir():
-        if not "patient" in file.name.lower():
+        if "patient" not in file.name.lower():
             print(f"skipping non-patient file {file.name}")
         else:
             print(f"reading patient problem file: {file.name}")
@@ -525,7 +523,7 @@ def test_speed(paths: list[pathlib.Path]) -> tuple[int, float]:
             files.append(open(path, "rb"))
         else:
             for file in path.iterdir():
-                if not ".gitkeep" in file.name:
+                if ".gitkeep" not in file.name:
                     print(f"TEST: Adding\t{file.name}")
                     file_size += file.stat().st_size
                     files.append(open(file, "rb"))
@@ -559,7 +557,7 @@ def parse_args(args: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "-t", "--test", help="Tests speed against raw read", default=False, action="store_true", dest="test"
     )
-    parser.add_argument("-p", "--processes", default=psutil.cpu_count(logical=False), type = int, dest="procs")
+    parser.add_argument("-p", "--processes", default=psutil.cpu_count(logical=False), type=int, dest="procs")
     return parser.parse_args(args)
 
 
