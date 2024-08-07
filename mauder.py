@@ -5,7 +5,6 @@ import multiprocessing
 import pathlib
 import psutil
 import textwrap
-import xlsxwriter
 
 # type aliases
 MaudeData = dict[int, list[bytes]]
@@ -45,7 +44,7 @@ def main(args: list):
         if arguments.test:
             end = time()
         codes = "-".join([c for c in arguments.codes])
-        file = pathlib.Path(f"{strftime("%Y%m%d%H%M%S")}-{codes}.xlsx")
+        file = pathlib.Path(f"{strftime("%Y%m%d%H%M%S")}-{codes}.txt")
         maude_data, header = convert_bytes_to_strings(maude_data, header)
         write_maude_data(file, maude_data, header)
         if arguments.test:
@@ -97,14 +96,14 @@ def write_maude_data(file: pathlib.Path, maude_data: MaudeData, header: Header) 
     """
     print("writing output to disk")
     total_lines = len(maude_data)
-    workbook = xlsxwriter.Workbook(file)
-    worksheet = workbook.add_worksheet()
-    worksheet.write_row(0, 0, header)
-    for i, key in enumerate(sorted(maude_data), start=1):
-        if i % 10_000 == 0:
-            print(f"writing line {i} of {total_lines}")
-        worksheet.write_row(i, 0, maude_data[key])
-    workbook.close()
+    with open(file, "w", encoding="utf-8") as f:
+        f.write("\t".join(header))  # type: ignore
+        f.write("\n")
+        for i, key in enumerate(sorted(maude_data), start=1):
+            f.write("\t".join(maude_data[key]))  # type: ignore
+            f.write("\n")
+            if i % 10_000 == 0:
+                print(f"writing line {i} of {total_lines}")
 
 
 def length_check(maude_data: MaudeData, header: Header) -> None:
@@ -239,7 +238,7 @@ def parse_device_files(path: pathlib.Path, product_codes: set[bytes], n_chunks: 
         for chunk_result in chunk_results:
             for key in chunk_result.keys() & maude_keys:
                 for i in range(1, line_len):
-                    byte_string = b"\nChange:\n" + chunk_result[key][i]
+                    byte_string = b"  Change: " + chunk_result[key][i]
                     maude_data[key][i] += byte_string
 
     return maude_data, header
@@ -395,7 +394,7 @@ def parse_foitext(path: pathlib.Path, maude_data: MaudeData, header: Header, n_c
         for chunk_result in chunk_results:
             for key in chunk_result.keys() & maude_keys:
                 for i in range(1, line_len):
-                    byte_string = b"\nChange:\n" + chunk_result[key][i]
+                    byte_string = b"  Change: " + chunk_result[key][i]
                     new_data[key][i] += byte_string
 
     maude_data = extend_data(maude_data, new_data)
@@ -416,7 +415,7 @@ def parse_patient_codes(patient_codes_file: pathlib.Path) -> PatientCodes:
             line = line[:RN]
             idx = line.find(b",")
             code = line[:idx]
-            problem = line[idx + 1:]  # skip the comma
+            problem = line[idx + 1 :]  # skip the comma
             problem = problem.lstrip(b'"').rstrip(b'"')  # more MAUDE weirdness.
             patient_codes[code] = problem
     return patient_codes
@@ -498,7 +497,7 @@ def parse_patient_chunk(
                     split_line[PROBLEM_CODE] = patient_codes[split_line[PROBLEM_CODE]]
                     if key in new_data:
                         for x in range(1, line_len):
-                            byte_string = b"\n" + split_line[x]
+                            byte_string = b"  " + split_line[x]
                             new_data[key][x] += byte_string
                     else:
                         new_data[key] = split_line
