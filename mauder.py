@@ -333,6 +333,7 @@ def parse_general_chunk(file: pathlib.Path, start: int, end: int, keys: set[int]
     RN = -2
     REPORT_KEY = 0
     maude_data: MaudeData = {}
+    these_keys: set[int] = set()
     pos: int = start
     with open(file, "rb") as f:
         f.seek(start)
@@ -345,7 +346,13 @@ def parse_general_chunk(file: pathlib.Path, start: int, end: int, keys: set[int]
             try:
                 key = int(split_line[REPORT_KEY])
                 if key in keys:
-                    maude_data[key] = split_line  # FIXME: change files can have the same key multiple times
+                    if key in these_keys:
+                        for i in range(1, line_len):
+                            byte_string = b"  Change: " + split_line[i]
+                            maude_data[key][i] += byte_string
+                    else:
+                        maude_data[key] = split_line
+                        these_keys.add(key)
             except ValueError:
                 # TODO: add some error logging here so we aren't failing siletly?
                 pass
@@ -549,7 +556,7 @@ def parse_args(args: list[str]) -> argparse.Namespace:
         containing any of the product codes: OYC, LGZ or QFG
     """
     )
-
+    # TODO: Add an argument for output directory.
     parser = argparse.ArgumentParser(
         prog="mauder.py", formatter_class=argparse.RawDescriptionHelpFormatter, description=description
     )
