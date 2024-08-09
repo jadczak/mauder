@@ -45,6 +45,7 @@ def main(args: list):
             end = time()
         codes = "-".join([c for c in arguments.codes])
         file = pathlib.Path(f"{strftime("%Y%m%d%H%M%S")}-{codes}.txt")
+        length_check(maude_data, header)
         maude_data, header = convert_bytes_to_strings(maude_data, header)
         write_maude_data(file, maude_data, header)
         if arguments.test:
@@ -113,12 +114,17 @@ def length_check(maude_data: MaudeData, header: Header) -> None:
     run this function any time you mutate the header or maude_data to see if
     things are still aligned.
     """
+    header_len = len(header)
     for key in maude_data:
         try:
-            assert len(header) == len(maude_data[key])
-            break
+            assert header_len == len(maude_data[key])
         except AssertionError:
             print(f"Header length mismatch: {len(header)} != {len(maude_data[key])}")
+            print(f"{key=}")
+            for i, val in enumerate(maude_data[key]):
+                print(f"{i}\t{val}")
+            for i, val in enumerate(header):
+                print(f"{i}\t{val}")
             exit(0)
 
 
@@ -339,7 +345,7 @@ def parse_general_chunk(file: pathlib.Path, start: int, end: int, keys: set[int]
             try:
                 key = int(split_line[REPORT_KEY])
                 if key in keys:
-                    maude_data[key] = split_line
+                    maude_data[key] = split_line  # FIXME: change files can have the same key multiple times
             except ValueError:
                 # TODO: add some error logging here so we aren't failing siletly?
                 pass
@@ -380,8 +386,7 @@ def parse_foitext(path: pathlib.Path, maude_data: MaudeData, header: Header, n_c
 
     # fill missing information
     keys_to_update = maude_keys - new_data.keys()
-    size = len(header_add)
-    new_data = fill_blank_data(new_data, size, keys_to_update)
+    new_data = fill_blank_data(new_data, line_len, keys_to_update)
 
     if change_file:
         print(f"reading foi text file: {change_file.name}")
@@ -393,7 +398,7 @@ def parse_foitext(path: pathlib.Path, maude_data: MaudeData, header: Header, n_c
             chunk_results = pool.starmap(parse_general_chunk, tasks)
         for chunk_result in chunk_results:
             for key in chunk_result.keys() & maude_keys:
-                for i in range(1, line_len):
+                for i in range(line_len):
                     byte_string = b"  Change: " + chunk_result[key][i]
                     new_data[key][i] += byte_string
 
@@ -456,8 +461,7 @@ def parse_patient_problems(
                 new_data.update(chunk_result)
     # fill in the blanks
     keys_to_update = maude_keys - new_data.keys()
-    size = len(header_add)
-    new_data = fill_blank_data(new_data, size, keys_to_update)
+    new_data = fill_blank_data(new_data, line_len, keys_to_update)
     header.extend(header_add)
     maude_data = extend_data(maude_data, new_data)
     return maude_data, header
