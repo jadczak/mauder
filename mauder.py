@@ -68,8 +68,8 @@ def main(args: list):
         if parsing_time:
             print(f"{'File Parsing':20}{parsing_time:<20.3f}{parsing_throughput:<20.3f}{parsing_efficiency:<20.2%}")
             print(f"{'Multiprocessing pool size':40}{arguments.procs}")
-            print(f"{'Time to write excel file':40}{writing_time:.3f}")
-            print(f"{'Total processing time':40}{total_time:.3f}")
+            print(f"{'Time to write text file':40}{writing_time:.3f}s")
+            print(f"{'Total processing time':40}{total_time:.3f}s")
         else:
             print(f"{'N/A':20}{0:20.3f}{0:20.3f}{0:20.2%}")
         print(f"{'Total size of processed files':40}{total_size / 2**30:.3f} GB")
@@ -96,15 +96,12 @@ def write_maude_data(file: pathlib.Path, maude_data: MaudeData, header: Header) 
     dump maude data to file
     """
     print("writing output to disk")
-    total_lines = len(maude_data)
     with open(file, "w", encoding="utf-8") as f:
         f.write("\t".join(header))  # type: ignore
         f.write("\n")
-        for i, key in enumerate(sorted(maude_data), start=1):
+        for key in sorted(maude_data):
             f.write("\t".join(maude_data[key]))  # type: ignore
             f.write("\n")
-            if i % 10_000 == 0:
-                print(f"writing line {i} of {total_lines}")
 
 
 def length_check(maude_data: MaudeData, header: Header) -> None:
