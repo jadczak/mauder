@@ -18,7 +18,7 @@ def main(args: list):
         print_long_help()
         parse_args(["-h"])
         exit(0)
-    if not any(vars(arguments).values()) or arguments.procs < 1:
+    if not len(args) or arguments.procs < 1:
         parse_args(["-h"])
 
     start = 0
