@@ -21,9 +21,9 @@ def main(args: list):
     if not len(args) or arguments.procs < 1:
         parse_args(["-h"])
 
-    start = 0
-    end = 0
-    write_end = 0
+    start: float = 0
+    end: float = 0
+    write_end: float = 0
     here = pathlib.Path(".")
     data_dir = here / "mdr-data-files"
     device_dir = data_dir / "device"
@@ -58,6 +58,8 @@ def main(args: list):
         read_throughput = total_size / read_time / 2**30
         read_efficiency = read_throughput / read_throughput
         parsing_time = end - start
+        if not parsing_time:
+            parsing_time = float("nan")
         parsing_throughput = total_size / parsing_time / 2**30
         parsing_efficiency = parsing_throughput / read_throughput
         writing_time = write_end - end
@@ -84,6 +86,9 @@ def convert_bytes_to_strings(maude_data: MaudeData, header: Header) -> tuple[Mau
     print("converting bytes to string")
     for key in maude_data:
         byte_data = maude_data[key]
+        # There doesn't seem to be a way to make pyright happy with the conversion from
+        # list[bytes] to list[str].  It ignores typing's cast() function, so for now we
+        # are going to just ignore types...
         str_data = [b.decode("utf-8", "ignore") for b in byte_data]  # type: ignore
         maude_data[key] = str_data  # type: ignore
 
@@ -96,7 +101,11 @@ def write_maude_data(file: pathlib.Path, maude_data: MaudeData, header: Header) 
     dump maude data to file
     """
     print("writing output to disk")
+    # NOTE: python's csv module is substanially slower than raw writing to disk.
     with open(file, "w", encoding="utf-8") as f:
+        # There doesn't seem to be a way to make pyright happy with the conversion from
+        # list[bytes] to list[str].  It ignores typing's cast() function, so for now we
+        # are going to just ignore types...
         f.write("\t".join(header))  # type: ignore
         f.write("\n")
         for key in sorted(maude_data):
@@ -499,7 +508,7 @@ def parse_patient_chunk(
             if len(split_line) != line_len:
                 continue
             try:
-                # slicing is faster than int(float(string))
+                # NOTE: slicing is faster than int(float(string))
                 key = int(split_line[REPORT_KEY][SPACE:DOT_ZERO])
                 if key in keys:
                     split_line[PROBLEM_CODE] = patient_codes[split_line[PROBLEM_CODE]]
