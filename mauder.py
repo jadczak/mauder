@@ -1,3 +1,4 @@
+from __future__ import annotations
 from sys import argv, exit
 from time import time, strftime
 import argparse
@@ -30,12 +31,15 @@ def main(args: list):
     foitext_dir = data_dir / "foitext"
     patient_codes_file = data_dir / "patientproblemdata/patientproblemcodes.csv"
     patient_problem_dir = data_dir / "patientproblemcode"
+    output_dir = pathlib.Path(arguments.output_dir)
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True)
+        print(f"creating output directory: {output_dir.resolve()}")
 
     if arguments.codes:
         if arguments.test:
             start = time()
         product_codes = {bytes(arg, encoding="utf-8") for arg in arguments.codes}
-
         n_chunks = arguments.procs
         maude_data, header = parse_device_files(device_dir, product_codes, n_chunks)
         maude_data, header = parse_foitext(foitext_dir, maude_data, header, n_chunks)
@@ -44,7 +48,7 @@ def main(args: list):
         if arguments.test:
             end = time()
         codes = "-".join([c for c in arguments.codes])
-        file = pathlib.Path(f"{strftime("%Y%m%d%H%M%S")}-{codes}.txt")
+        file = output_dir / rf"{strftime("%Y%m%d%H%M%S")}-{codes}.txt"
         length_check(maude_data, header)
         maude_data, header = convert_bytes_to_strings(maude_data, header)
         write_maude_data(file, maude_data, header)
@@ -562,7 +566,6 @@ def parse_args(args: list[str]) -> argparse.Namespace:
         containing any of the product codes: OYC, LGZ or QFG
     """
     )
-    # TODO: Add an argument for output directory.
     parser = argparse.ArgumentParser(
         prog="mauder.py", formatter_class=argparse.RawDescriptionHelpFormatter, description=description
     )
@@ -574,6 +577,7 @@ def parse_args(args: list[str]) -> argparse.Namespace:
         "-t", "--test", help="Tests speed against raw read", default=False, action="store_true", dest="test"
     )
     parser.add_argument("-p", "--processes", default=psutil.cpu_count(logical=False), type=int, dest="procs")
+    parser.add_argument("-o", "--output", default=r"output", type=str, dest="output_dir")
     return parser.parse_args(args)
 
 
