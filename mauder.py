@@ -7,6 +7,8 @@ import pathlib
 import psutil
 import textwrap
 
+__version__ = 0.1
+
 # type aliases
 MaudeData = dict[int, list[bytes]]
 Header = list[bytes]
@@ -25,13 +27,15 @@ def main(args: list):
     start: float = 0
     end: float = 0
     write_end: float = 0
-    here = pathlib.Path(".")
+    here = pathlib.Path(__file__).parent
     data_dir = here / "mdr-data-files"
     device_dir = data_dir / "device"
     foitext_dir = data_dir / "foitext"
     patient_codes_file = data_dir / "patientproblemdata/patientproblemcodes.csv"
     patient_problem_dir = data_dir / "patientproblemcode"
     output_dir = pathlib.Path(arguments.output_dir)
+    if not output_dir.is_absolute():
+        output_dir = here / output_dir
     if not output_dir.exists():
         output_dir.mkdir(parents=True)
         print(f"creating output directory: {output_dir.resolve()}")
@@ -578,6 +582,7 @@ def parse_args(args: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("-p", "--processes", default=psutil.cpu_count(logical=False), type=int, dest="procs")
     parser.add_argument("-o", "--output", default=r"output", type=str, dest="output_dir")
+    parser.add_argument("-v", "--version", action="version", version=f"Mauder {__version__}")
     return parser.parse_args(args)
 
 
