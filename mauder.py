@@ -54,8 +54,7 @@ def main(args: list):
         codes = "-".join([c for c in arguments.codes])
         file = output_dir / rf"{strftime("%Y%m%d%H%M%S")}-{codes}.txt"
         length_check(maude_data, header)
-        maude_data, header = convert_bytes_to_strings(maude_data, header)
-        write_maude_data(file, maude_data, header)
+        write_maude_data_bytes(file, maude_data, header)
         if arguments.test:
             write_end = time()
     else:
@@ -90,6 +89,8 @@ def main(args: list):
 def convert_bytes_to_strings(maude_data: MaudeData, header: Header) -> tuple[MaudeData, Header]:
     """
     excel writers don't allow passing 'errors' values for managing non utf-8 characters.
+
+    NOTE:  This isn't necessary when writing as bytes.
     """
     print("converting bytes to string")
     for key in maude_data:
@@ -119,6 +120,20 @@ def write_maude_data(file: pathlib.Path, maude_data: MaudeData, header: Header) 
         for key in sorted(maude_data):
             f.write("\t".join(maude_data[key]))  # type: ignore
             f.write("\n")
+
+
+def write_maude_data_bytes(file: pathlib.Path, maude_data: MaudeData, header: Header) -> None:
+    """
+    dump maude data to file
+    """
+    print("writing output to disk")
+    # NOTE: python's csv module is substanially slower than raw writing to disk.
+    with open(file, "wb") as f:
+        f.write(b"\t".join(header))
+        f.write(b"\n")
+        for key in sorted(maude_data):
+            f.write(b"\t".join(maude_data[key]))
+            f.write(b"\n")
 
 
 def length_check(maude_data: MaudeData, header: Header) -> None:
