@@ -4,10 +4,9 @@ from time import time, strftime
 import argparse
 import multiprocessing
 import pathlib
-import psutil
 import textwrap
 
-__version__ = 0.1
+__version__ = 0.2
 
 # type aliases
 MaudeData = dict[int, list[bytes]]
@@ -595,7 +594,7 @@ def parse_args(args: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "-t", "--test", help="Tests speed against raw read", default=False, action="store_true", dest="test"
     )
-    parser.add_argument("-p", "--processes", default=psutil.cpu_count(logical=False), type=int, dest="procs")
+    parser.add_argument("-p", "--processes", default=multiprocessing.cpu_count(), type=int, dest="procs")
     parser.add_argument("-o", "--output", default=r"output", type=str, dest="output_dir")
     parser.add_argument("-v", "--version", action="version", version=f"Mauder {__version__}")
     return parser.parse_args(args)

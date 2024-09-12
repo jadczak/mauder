@@ -47,15 +47,13 @@ Current performance on a i7-13700k with a Samsung 980 PRO NVMe reading data from
 
 Product code OYC
 
-pypy performance took a hit once multiprocessing was enabled.  Scalene doesn't work with multiprocessing out of the box, so a different profiler is needed to figure out where there is time to be gained at this point.  Using 16 vs 8 cores doesn't seem to matter, perhaps there is too much IO contention now.  Maybe instead of reading line by line, we start injesting larger chunks of data and deal with the bytes in memory, freeing up time for other processes to use the IO?
-
 ```
 MODE                TIME (s)            THROUGHPUT GB/s     EFFICIENCY
-Raw Reading         2.681               3.439               100.00%
-File Parsing        3.404               2.708               78.75%
-Multiprocessing pool size               16
-Time to write text file                 0.562s
-Total processing time                   3.966s
+Raw Reading         2.462               3.744               100.00%
+File Parsing        3.368               2.738               73.11%
+Multiprocessing pool size               24
+Time to write text file                 0.233s
+Total processing time                   3.601s
 Total size of processed files           9.219 GB
 ```
 
@@ -72,3 +70,5 @@ Dataset retrieved June 2024:
 - foitextChange.txt
 - patientproblemcode.txt
 
+# Other Stuff
+Multiprocessing reports the number of logical cores available on the system, not the number of physical cores.  Running Mauder with all of the logical cores doesn't improve performance over using just the physical cores so it seems dumb to be using anything more than the number of physical cores.  However, having an external dependancy on `psutil` just to get an accurate number of physical cores in a system seems dumber.  Use the `-p` option to have Mauder use whatever you want for a Pool size if the number of logical cores doesn't jive with you.
