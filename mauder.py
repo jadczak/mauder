@@ -6,7 +6,7 @@ import multiprocessing
 import pathlib
 import textwrap
 
-__version__ = 0.2
+__version__ = 0.3
 
 # type aliases
 MaudeData = dict[int, list[bytes]]
@@ -14,7 +14,7 @@ Header = list[bytes]
 PatientCodes = dict[bytes, bytes]
 
 
-def main(args: list):
+def main(args: list) -> int:
     arguments = parse_args(args)
     if arguments.more:
         print_long_help()
@@ -30,7 +30,7 @@ def main(args: list):
     data_dir = here / "mdr-data-files"
     device_dir = data_dir / "device"
     foitext_dir = data_dir / "foitext"
-    patient_codes_file = data_dir / "patientproblemdata/patientproblemcodes.csv"
+    patient_codes_dir = data_dir / "patientproblemdata"
     patient_problem_dir = data_dir / "patientproblemcode"
     output_dir = pathlib.Path(arguments.output_dir)
     if not output_dir.is_absolute():
@@ -46,7 +46,7 @@ def main(args: list):
         n_chunks = arguments.procs
         maude_data, header = parse_device_files(device_dir, product_codes, n_chunks)
         maude_data, header = parse_foitext(foitext_dir, maude_data, header, n_chunks)
-        patient_codes = parse_patient_codes(patient_codes_file)
+        patient_codes = parse_patient_codes(patient_codes_dir)
         maude_data, header = parse_patient_problems(patient_problem_dir, maude_data, header, patient_codes, n_chunks)
         if arguments.test:
             end = time()
@@ -60,7 +60,7 @@ def main(args: list):
         print("No product codes provided.")
 
     if arguments.test:
-        total_size, read_time = test_speed([device_dir, foitext_dir, patient_problem_dir, patient_codes_file])
+        total_size, read_time = test_speed([device_dir, foitext_dir, patient_problem_dir, patient_codes_dir])
         read_throughput = total_size / read_time / 2**30
         read_efficiency = read_throughput / read_throughput
         parsing_time = end - start
@@ -82,7 +82,7 @@ def main(args: list):
             print(f"{'N/A':20}{0:20.3f}{0:20.3f}{0:20.2%}")
         print(f"{'Total size of processed files':40}{total_size / 2**30:.3f} GB")
 
-    exit(0)
+    return 0
 
 
 def convert_bytes_to_strings(maude_data: MaudeData, header: Header) -> tuple[MaudeData, Header]:
@@ -442,22 +442,37 @@ def parse_foitext(path: pathlib.Path, maude_data: MaudeData, header: Header, n_c
     return maude_data, header
 
 
-def parse_patient_codes(patient_codes_file: pathlib.Path) -> PatientCodes:
+def parse_patient_codes(path: pathlib.Path) -> PatientCodes:
     """
     Patient outcomes are encoded for reasons that are beyond me.  This creates
     the lookup for turning a patient code into the human readable translation.
     """
     RN = -2
+    COLS = 2
     patient_codes = {}
-    print(f"reading patient code file: {patient_codes_file.name}")
-    with open(patient_codes_file, "rb") as f:
-        for line in f:
-            line = line[:RN]
-            idx = line.find(b",")
-            code = line[:idx]
-            problem = line[idx + 1 :]  # skip the comma
-            problem = problem.lstrip(b'"').rstrip(b'"')  # more MAUDE weirdness.
-            patient_codes[code] = problem
+    # Special case because the FDA can't make a CSV.  These codes end up split
+    # across lines and mangled if you open the file in a text editor.
+    patient_codes |= {b"4908": b"Hypertrophy", b"4911": b"Withdrawl Syndrome"}
+    for file in path.iterdir():
+        if "patient" in file.name:
+            print(f"reading patient code file: {file.name}")
+            with open(file, "rb") as f:
+                header = f.readline().split(b",")
+                header_len = len(header)
+                n_strip = int(header_len - COLS)
+                for line in f:
+                    line = line[:RN]
+                    # We can't just split on commas because there can be commas in the
+                    # problem descriptions.  So we trim the right most columns.  Why this
+                    # file is comma delimited instead of pipe like the rest is beyond me.
+                    for _ in range(n_strip):
+                        line = line[: line.rfind(b",")]
+                    idx = line.find(b",")
+                    code = line[:idx]
+                    problem = line[idx + 1 :]  # skip the comma
+                    problem = problem.lstrip(b'"').rstrip(b'"')  # more MAUDE weirdness.
+                    patient_codes[code] = problem
+
     return patient_codes
 
 
@@ -640,4 +655,5 @@ def print_long_help():
 
 
 if __name__ == "__main__":
-    main(argv[1:])
+    err = main(argv[1:])
+    exit(err)
