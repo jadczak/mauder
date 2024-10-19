@@ -371,7 +371,6 @@ def parse_general_chunk(file: pathlib.Path, start: int, end: int, keys: set[int]
     File parsing based on the specifed start and end bytes in the file.
     """
     RN = -2
-    REPORT_KEY = 0
     maude_data: MaudeData = {}
     these_keys: set[int] = set()
     pos: int = start
@@ -380,22 +379,22 @@ def parse_general_chunk(file: pathlib.Path, start: int, end: int, keys: set[int]
         while pos < end:
             line = f.readline()
             pos += len(line)
-            split_line = line[:RN].split(b"|")
-            if len(split_line) != line_len:
-                continue  # ditch malformed lines.
+            bar_pos = line.find(b"|")
             try:
-                key = int(split_line[REPORT_KEY])
-                if key in keys:
-                    if key in these_keys:
-                        for i in range(1, line_len):
-                            byte_string = b"  Change: " + split_line[i]
-                            maude_data[key][i] += byte_string
-                    else:
-                        maude_data[key] = split_line
-                        these_keys.add(key)
+                key = int(line[:bar_pos])
             except ValueError:
-                # TODO: add some error logging here so we aren't failing siletly?
-                pass
+                continue
+            if key in keys:
+                split_line = line[:RN].split(b"|")
+                if len(split_line) != line_len:
+                    continue
+                if key in these_keys:
+                    for i in range(1, line_len):
+                        byte_string = b"  Change: " + split_line[i]
+                        maude_data[key][i] += byte_string
+                else:
+                    maude_data[key] = split_line
+                    these_keys.add(key)
     return maude_data
 
 
