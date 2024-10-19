@@ -657,7 +657,8 @@ def test_speed(paths: list[pathlib.Path]) -> tuple[int, float]:
             files.append(open(path, "rb"))
         else:
             for file in path.iterdir():
-                if ".gitkeep" not in file.name:
+                ext = file.suffix
+                if ext == ".txt" or ext == ".csv":
                     print(f"TEST: Adding\t{file.name}")
                     file_size += file.stat().st_size
                     files.append(open(file, "rb"))
