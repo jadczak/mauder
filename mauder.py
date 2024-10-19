@@ -10,6 +10,11 @@ import textwrap
 __version__ = 0.4
 
 # type aliases
+# NOTE: the dictionary keys are int instead of bytes because it is faster.
+#       my __guess__ is that the special case of hash(x) for an integer returning x
+#       ends up being substantially faster than running the hashing algorithm on
+#       the bytes to the point that it ends beating out the bytes -> int conversion
+#       that has to be done on each line.
 MaudeData = dict[int, list[bytes]]
 Header = list[bytes]
 PatientCodes = dict[bytes, bytes]
