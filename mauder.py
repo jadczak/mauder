@@ -1,17 +1,24 @@
 from __future__ import annotations
 from sys import argv, exit
 from time import time, strftime
+from enum import Enum, auto
 import argparse
 import multiprocessing
 import pathlib
 import textwrap
 
-__version__ = 0.3
+__version__ = 0.4
 
 # type aliases
 MaudeData = dict[int, list[bytes]]
 Header = list[bytes]
 PatientCodes = dict[bytes, bytes]
+
+
+# enums
+class PtFileType(Enum):
+    INT = auto()
+    DEC = auto()
 
 
 def main(args: list) -> int:
@@ -499,8 +506,9 @@ def parse_patient_problems(
                 header_add = this_header[1:]
             locations = chunk_file(file, n_chunks)
             tasks = []
+            fmt = get_patient_problem_format(file)
             for start, end in locations:
-                tasks.append([file, start, end, maude_keys, line_len, patient_codes])
+                tasks.append([file, start, end, maude_keys, line_len, patient_codes, fmt])
             with multiprocessing.Pool(n_chunks) as pool:
                 chunk_results = pool.starmap(parse_patient_chunk, tasks)
             for chunk_result in chunk_results:
@@ -517,7 +525,40 @@ def parse_patient_problems(
     return maude_data, header
 
 
+def get_patient_problem_format(file: pathlib.Path) -> PtFileType:
+    """
+    The patient problem format has changed over time.  To try and keep backward
+    compatibility we attempt to figure out which version and parse appropriately.
+    """
+    with open(file, "rb") as f:
+        f.readline()  # header
+        line = f.readline()
+        problem_code = line.split(b"|")[0]
+        if b"." in problem_code:
+            return PtFileType.DEC
+        else:
+            return PtFileType.INT
+
+
 def parse_patient_chunk(
+    file: pathlib.Path,
+    start: int,
+    end: int,
+    keys: set[int],
+    line_len: int,
+    patient_codes: PatientCodes,
+    f_type: PtFileType,
+) -> MaudeData:
+    """
+    Helper function because of capricious changes to file formats.
+    """
+    if f_type == PtFileType.DEC:
+        return parse_patient_chunk_dec(file, start, end, keys, line_len, patient_codes)
+    elif f_type == PtFileType.INT:
+        return parse_patient_chunk_int(file, start, end, keys, line_len, patient_codes)
+
+
+def parse_patient_chunk_dec(
     file: pathlib.Path, start: int, end: int, keys: set[int], line_len: int, patient_codes: PatientCodes
 ) -> MaudeData:
     """
@@ -556,6 +597,46 @@ def parse_patient_chunk(
                     else:
                         new_data[key] = split_line
 
+            except IndexError:
+                # TODO: add some error logging.
+                pass
+    return new_data
+
+
+def parse_patient_chunk_int(
+    file: pathlib.Path, start: int, end: int, keys: set[int], line_len: int, patient_codes: PatientCodes
+) -> MaudeData:
+    """
+    The patientproblemcode.txt file is weird in a few ways.
+    1)  report keys show up multiple times in the file because
+        patients can have multiple problems associated with them
+    2)  Any changes show up in this file instead of in a separate
+        "change" file.
+    """
+
+    RN = -2
+    REPORT_KEY = 0
+    PROBLEM_CODE = 2
+    new_data: MaudeData = {}
+    pos: int = start
+    with open(file, "rb") as f:
+        f.seek(start)
+        while pos < end:
+            line = f.readline()
+            pos += len(line)
+            split_line = line[:RN].split(b"|")
+            if len(split_line) != line_len:
+                continue
+            try:
+                key = int(split_line[REPORT_KEY])
+                if key in keys:
+                    split_line[PROBLEM_CODE] = patient_codes[split_line[PROBLEM_CODE]]
+                    if key in new_data:
+                        for x in range(1, line_len):
+                            byte_string = b"  " + split_line[x]
+                            new_data[key][x] += byte_string
+                    else:
+                        new_data[key] = split_line
             except IndexError:
                 # TODO: add some error logging.
                 pass
