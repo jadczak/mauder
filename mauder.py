@@ -19,8 +19,10 @@ MaudeData = dict[int, list[bytes]]
 Header = list[bytes]
 PatientCodes = dict[bytes, bytes]
 
+SUCCESS = 0
+FAILURE = 1
 
-# enums
+
 class PtFileType(Enum):
     INT = auto()
     DEC = auto()
@@ -31,7 +33,7 @@ def main(args: list) -> int:
     if arguments.more:
         print_long_help()
         parse_args(["-h"])
-        exit(0)
+        return FAILURE
     if not len(args) or arguments.procs < 1:
         parse_args(["-h"])
 
@@ -64,7 +66,8 @@ def main(args: list) -> int:
             end = time()
         codes = "-".join([c for c in arguments.codes])
         file = output_dir / rf"{strftime("%Y%m%d%H%M%S")}-{codes}.txt"
-        length_check(maude_data, header)
+        if err := length_check(maude_data, header):
+            return err
         write_maude_data_bytes(file, maude_data, header)
         if arguments.test:
             write_end = time()
@@ -94,7 +97,7 @@ def main(args: list) -> int:
             print(f"{'N/A':20}{0:20.3f}{0:20.3f}{0:20.2%}")
         print(f"{'Total size of processed files':40}{total_size / 2**30:.3f} GB")
 
-    return 0
+    return SUCCESS
 
 
 def convert_bytes_to_strings(maude_data: MaudeData, header: Header) -> tuple[MaudeData, Header]:
@@ -147,7 +150,7 @@ def write_maude_data_bytes(file: pathlib.Path, maude_data: MaudeData, header: He
             f.write(b"\n")
 
 
-def length_check(maude_data: MaudeData, header: Header) -> None:
+def length_check(maude_data: MaudeData, header: Header) -> int:
     """
     Sanity check to make sure that the data is well formed.  The header and
     the parsed MAUDE data were getting out of sync during development, so
@@ -158,6 +161,7 @@ def length_check(maude_data: MaudeData, header: Header) -> None:
     for key in maude_data:
         try:
             assert header_len == len(maude_data[key])
+            return SUCCESS
         except AssertionError:
             print(f"Header length mismatch: {len(header)} != {len(maude_data[key])}")
             print(f"{key=}")
@@ -165,7 +169,8 @@ def length_check(maude_data: MaudeData, header: Header) -> None:
                 print(f"{i}\t{val}")
             for i, val in enumerate(header):
                 print(f"{i}\t{val}")
-            exit(0)
+            return FAILURE
+    return FAILURE  # NOTE: Unreachable. Appeases linter.
 
 
 def dump_key(maude_data: MaudeData, header: Header, key: int = 0) -> None:
