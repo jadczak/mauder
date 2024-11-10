@@ -33,9 +33,10 @@ def main(args: list) -> int:
     if arguments.more:
         print_long_help()
         parse_args(["-h"])
-        return FAILURE
+        return SUCCESS  # NOTE: not necessary -h will exit, for clarity only.
     if not len(args) or arguments.procs < 1:
         parse_args(["-h"])
+        return SUCCESS  # NOTE: not necessary -h will exit, for clarity only.
 
     start: float = 0
     end: float = 0
