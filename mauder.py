@@ -711,9 +711,8 @@ def print_long_help():
     long_help = textwrap.dedent(
         """\
     This utility searches the mrd-data-files directory for all product codes
-    provided, aggregating useful information and exporting it as an excel
-    document and also as a python pickle file containing a pandas dataframe
-    of the aggregated information
+    provided, aggregating useful information and exporting it as tab delimited
+    table.
 
     Maude data can be downloaded from the FDA's website in at the following location:
 
