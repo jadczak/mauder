@@ -66,7 +66,7 @@ def main(args: list) -> int:
         if arguments.test:
             end = time()
         codes = "-".join([c for c in arguments.codes])
-        file = output_dir / rf"{strftime("%Y%m%d%H%M%S")}-{codes}.txt"
+        file = output_dir / rf"{strftime('%Y%m%d%H%M%S')}-{codes}.txt"
         if err := length_check(maude_data, header):
             return err
         write_maude_data_bytes(file, maude_data, header)
