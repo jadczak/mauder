@@ -284,7 +284,7 @@ def parse_device_files(path: pathlib.Path, product_codes: set[bytes], n_chunks: 
         tasks = []
         maude_keys = set(maude_data.keys())
         for start, end in locations:
-            tasks.append([change_file, start, end, product_codes, line_len])
+            tasks.append([change_file, start, end, maude_keys, line_len])
         with multiprocessing.Pool(n_chunks) as pool:
             chunk_results = pool.starmap(parse_general_chunk, tasks)
         for chunk_result in chunk_results:
@@ -710,7 +710,7 @@ def parse_args(args: list[str]) -> argparse.Namespace:
 def print_long_help():
     long_help = textwrap.dedent(
         """\
-    This utility searches the mrd-data-files directory for all product codes
+    This utility searches the mdr-data-files directory for all product codes
     provided, aggregating useful information and exporting it as tab delimited
     table.
 
