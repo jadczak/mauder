@@ -43,30 +43,36 @@ Another quirk is a report can have multiple patient problems associated with it,
 Lastly there are "changes".  For the DEVICE, foitext, and the patient files there are separate files that have updates to "the existing base records".  That stuff will get tacked on with the word "change:" in the locations where some more data was added.
 
 # Performance
-Current performance on a i7-13700k with a Samsung 980 PRO NVMe reading data from 2022 and 2023.
+Current performance on a i7-13700k with a Samsung 980 PRO NVMe.
 
 Product code OYC
 
+A note about the numbers below.  The "Raw Reading" is only using a single thread to read read through each line of the files without doing any processing of the line.  The "File Parsing" is using processing pool with all the logical cores performing the parsing.
+
 ```
 MODE                TIME (s)            THROUGHPUT GB/s     EFFICIENCY
-Raw Reading         2.462               3.744               100.00%
-File Parsing        3.368               2.738               73.11%
+Raw Reading         3.890               3.670               100.00%
+File Parsing        3.219               4.436               120.85%
 Multiprocessing pool size               24
-Time to write text file                 0.233s
-Total processing time                   3.601s
-Total size of processed files           9.219 GB
+Time to write text file                 0.449s
+Total processing time                   3.668s
+Total size of processed files           14.278 GB
 ```
 
 ![CrystalDiskMarkTest](./assets/crystal-disk-mark-speeds.png "CrystalDiskMark 8GB")
 
 
-Dataset retrieved June 2024:
+Dataset retrieved July 2025:
+- DEVICE.txt
 - DEVICE2022.txt
 - DEVICE2023.txt
+- DEVICE2024.txt
 - DEVICEChange.txt
 - deviceproblemcodes.csv
+- foitext.txt
 - foitext2022.txt
 - foitext2023.txt
+- foitext2024.txt
 - foitextChange.txt
 - patientproblemcode.txt
 
