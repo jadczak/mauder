@@ -51,11 +51,11 @@ A note about the numbers below.  The "Raw Reading" is only using a single thread
 
 ```
 MODE                TIME (s)            THROUGHPUT GB/s     EFFICIENCY
-Raw Reading         3.890               3.670               100.00%
-File Parsing        3.219               4.436               120.85%
+Raw Reading         4.496               3.176               100.00%
+File Parsing        2.781               5.133               161.66%
 Multiprocessing pool size               24
-Time to write text file                 0.449s
-Total processing time                   3.668s
+Time to write text file                 0.325s
+Total processing time                   3.107s
 Total size of processed files           14.278 GB
 ```
 

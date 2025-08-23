@@ -8,7 +8,7 @@ import multiprocessing.pool
 import pathlib
 import textwrap
 
-__version__ = 0.7
+__version__ = 0.8
 
 # type aliases
 # NOTE: the dictionary keys are int instead of bytes because it is faster.
@@ -326,7 +326,7 @@ def parse_device_chunk_fast_codes(
     REPORT_KEY = 0
     maude_data: MaudeData = {}
     pos: int = start
-    with open(file, "rb") as f:
+    with open(file, "rb", buffering=10485760) as f:
         f.seek(start)
         while pos < end:
             line = f.readline()
@@ -359,7 +359,7 @@ def parse_device_chunk_reg_codes(
     PRODUCT_CODE = 25
     maude_data: MaudeData = {}
     pos: int = start
-    with open(file, "rb") as f:
+    with open(file, "rb", buffering=10485760) as f:
         f.seek(start)
         while pos < end:
             line = f.readline()
@@ -386,7 +386,7 @@ def parse_general_chunk(file: pathlib.Path, start: int, end: int, keys: set[int]
     maude_data: MaudeData = {}
     these_keys: set[int] = set()
     pos: int = start
-    with open(file, "rb") as f:
+    with open(file, "rb", buffering=10485760) as f:
         f.seek(start)
         while pos < end:
             line = f.readline()
@@ -479,7 +479,8 @@ def parse_patient_codes(path: pathlib.Path) -> PatientCodes:
     for file in path.iterdir():
         if "patient" in file.name:
             print(f"reading patient code file: {file.name}")
-            with open(file, "rb") as f:
+            # with open(file, "rb") as f:
+            with open(file, "rb", buffering=10485760) as f:
                 header = f.readline().split(b",")
                 header_len = len(header)
                 n_strip = int(header_len - COLS)
@@ -597,7 +598,7 @@ def parse_patient_chunk_dec(
     PROBLEM_CODE = 2
     new_data: MaudeData = {}
     pos: int = start
-    with open(file, "rb") as f:
+    with open(file, "rb", buffering=10485760) as f:
         f.seek(start)
         while pos < end:
             line = f.readline()
@@ -639,7 +640,7 @@ def parse_patient_chunk_int(
     PROBLEM_CODE = 2
     new_data: MaudeData = {}
     pos: int = start
-    with open(file, "rb") as f:
+    with open(file, "rb", buffering=10485760) as f:
         f.seek(start)
         while pos < end:
             line = f.readline()
