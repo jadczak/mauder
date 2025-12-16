@@ -23,6 +23,10 @@ PoolType = multiprocessing.pool.Pool
 
 SUCCESS = 0
 FAILURE = 1
+KILO = 1024
+MEGA = 1024 * KILO
+GIGA = 1024 * MEGA
+BUF_SIZE = 10 * MEGA
 
 
 class PtFileType(Enum):
@@ -74,21 +78,25 @@ def main(args: list) -> int:
         codes = "-".join([c for c in arguments.codes])
         file = output_dir / rf"{strftime('%Y%m%d%H%M%S')}-{codes}.txt"
         if err := length_check(maude_data, header):
+            print("Data parsing error.")
+            print("The length of the header and the number columns do not matcher.")
+            print("Report this error to https://www.github.com/jadczak/mauder")
             return err
         write_maude_data_bytes(file, maude_data, header)
         if arguments.test:
             write_end = time()
     else:
         print("No product codes provided.")
+        return ERROR
 
     if arguments.test:
         total_size, read_time = test_speed([device_dir, foitext_dir, patient_problem_dir, patient_codes_dir])
-        read_throughput = total_size / read_time / 2**30
+        read_throughput = total_size / read_time / GIGA
         read_efficiency = read_throughput / read_throughput
         parsing_time = end - start
         if not parsing_time:
             parsing_time = float("nan")
-        parsing_throughput = total_size / parsing_time / 2**30
+        parsing_throughput = total_size / parsing_time / GIGA
         parsing_efficiency = parsing_throughput / read_throughput
         writing_time = write_end - end
         total_time = write_end - start
@@ -102,7 +110,7 @@ def main(args: list) -> int:
             print(f"{'Total processing time':40}{total_time:.3f}s")
         else:
             print(f"{'N/A':20}{0:20.3f}{0:20.3f}{0:20.2%}")
-        print(f"{'Total size of processed files':40}{total_size / 2**30:.3f} GB")
+        print(f"{'Total size of processed files':40}{total_size / GIGA:.3f} GB")
 
     return SUCCESS
 
@@ -256,8 +264,6 @@ def parse_device_files(
     The MAUDE data can be screwy so we have to check for line length and deal with data showing
     up in the wrong locations.  The Device files seem to be the worst about malformed data.
     """
-    # I thought about doing this dynamically, but screw it.
-    # I'll fix it later if it becomes a problem.
     change_file = None
     header: Header = []
     line_len: int = -1
@@ -326,7 +332,7 @@ def parse_device_chunk_fast_codes(
     REPORT_KEY = 0
     maude_data: MaudeData = {}
     pos: int = start
-    with open(file, "rb", buffering=10485760) as f:
+    with open(file, "rb", buffering=BUF_SIZE) as f:
         f.seek(start)
         while pos < end:
             line = f.readline()
@@ -359,7 +365,7 @@ def parse_device_chunk_reg_codes(
     PRODUCT_CODE = 25
     maude_data: MaudeData = {}
     pos: int = start
-    with open(file, "rb", buffering=10485760) as f:
+    with open(file, "rb", buffering=BUF_SIZE) as f:
         f.seek(start)
         while pos < end:
             line = f.readline()
@@ -386,7 +392,7 @@ def parse_general_chunk(file: pathlib.Path, start: int, end: int, keys: set[int]
     maude_data: MaudeData = {}
     these_keys: set[int] = set()
     pos: int = start
-    with open(file, "rb", buffering=10485760) as f:
+    with open(file, "rb", buffering=BUF_SIZE) as f:
         f.seek(start)
         while pos < end:
             line = f.readline()
@@ -480,7 +486,7 @@ def parse_patient_codes(path: pathlib.Path) -> PatientCodes:
         if "patient" in file.name:
             print(f"reading patient code file: {file.name}")
             # with open(file, "rb") as f:
-            with open(file, "rb", buffering=10485760) as f:
+            with open(file, "rb", buffering=BUF_SIZE) as f:
                 header = f.readline().split(b",")
                 header_len = len(header)
                 n_strip = int(header_len - COLS)
@@ -598,7 +604,7 @@ def parse_patient_chunk_dec(
     PROBLEM_CODE = 2
     new_data: MaudeData = {}
     pos: int = start
-    with open(file, "rb", buffering=10485760) as f:
+    with open(file, "rb", buffering=BUF_SIZE) as f:
         f.seek(start)
         while pos < end:
             line = f.readline()
@@ -640,7 +646,7 @@ def parse_patient_chunk_int(
     PROBLEM_CODE = 2
     new_data: MaudeData = {}
     pos: int = start
-    with open(file, "rb", buffering=10485760) as f:
+    with open(file, "rb", buffering=BUF_SIZE) as f:
         f.seek(start)
         while pos < end:
             line = f.readline()

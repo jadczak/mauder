@@ -47,7 +47,7 @@ Current performance on a i7-13700k with a Samsung 980 PRO NVMe.
 
 Product code OYC
 
-A note about the numbers below.  The "Raw Reading" is only using a single thread to read read through each line of the files without doing any processing of the line.  The "File Parsing" is using processing pool with all the logical cores performing the parsing.
+A note about the numbers below.  The "Raw Reading" is only using a single thread to read read through each line of the files without doing any processing of the line.  The "File Parsing" is using processing pool with all the logical cores performing the parsing.  The program is run twice to generate these numbers so the file cache is hot.
 
 ```
 MODE                TIME (s)            THROUGHPUT GB/s     EFFICIENCY
