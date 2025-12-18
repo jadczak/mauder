@@ -554,11 +554,14 @@ def parse_patient_problems(
                 tasks.append([file, start, end, maude_keys, line_len, patient_codes, fmt])
             chunk_results = pool.starmap(parse_patient_chunk, tasks)
             for chunk_result in chunk_results:
-                # theoretically this song and dance is not needed since there should
-                # only ever be one file here, but you never known how the maude
-                # database will change, and I've already been bitten by crap like
-                # this.  So we parse like there will someday be multiple files.
-                new_data.update(chunk_result)
+                # we need to manually merge here because an mdr key can show up in adjacent
+                # chunks due to each line getting it's own problem code
+                for k, v in chunk_result.items():
+                    if k in new_data:
+                        for x in range(1, line_len):
+                            new_data[k][x] += b" " + v[x]
+                    else:
+                        new_data[k] = v
     # fill in the blanks
     keys_to_update = maude_keys - new_data.keys()
     new_data = fill_blank_data(new_data, line_len, keys_to_update)
