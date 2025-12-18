@@ -131,42 +131,6 @@ def main(args: list) -> int:
     return SUCCESS
 
 
-def convert_bytes_to_strings(maude_data: MaudeData, header: Header) -> tuple[MaudeData, Header]:
-    """
-    excel writers don't allow passing 'errors' values for managing non utf-8 characters.
-
-    NOTE:  This isn't necessary when writing as bytes.
-    """
-    print("converting bytes to string")
-    for key in maude_data:
-        byte_data = maude_data[key]
-        # There doesn't seem to be a way to make pyright happy with the conversion from
-        # list[bytes] to list[str].  It ignores typing's cast() function, so for now we
-        # are going to just ignore types...
-        str_data = [b.decode("utf-8", "ignore") for b in byte_data]  # type: ignore
-        maude_data[key] = str_data  # type: ignore
-
-    header = [b.decode("utf-8", "ignore") for b in header]  # type: ignore
-    return maude_data, header
-
-
-def write_maude_data(file: pathlib.Path, maude_data: MaudeData, header: Header) -> None:
-    """
-    dump maude data to file
-    """
-    print("writing output to disk")
-    # NOTE: python's csv module is substantially slower than raw writing to disk.
-    with open(file, "w", encoding="utf-8") as f:
-        # There doesn't seem to be a way to make pyright happy with the conversion from
-        # list[bytes] to list[str].  It ignores typing's cast() function, so for now we
-        # are going to just ignore types...
-        f.write("\t".join(header))  # type: ignore
-        f.write("\n")
-        for key in sorted(maude_data):
-            f.write("\t".join(maude_data[key]))  # type: ignore
-            f.write("\n")
-
-
 def write_maude_data_bytes(file: pathlib.Path, maude_data: MaudeData, header: Header) -> None:
     """
     dump maude data to file
