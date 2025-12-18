@@ -673,7 +673,7 @@ def write_summary_data(
     n_reports: int,
     n_problems: int,
     summary_data: SummaryData,
-    product_codes: set(bytes),
+    product_codes: set[bytes],
     timestamp: str,
 ) -> None:
     """
