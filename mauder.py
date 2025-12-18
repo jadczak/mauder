@@ -523,7 +523,7 @@ def parse_patient_problems(
                 for k, v in chunk_result.items():
                     if k in new_data:
                         for x in range(1, line_len):
-                            new_data[k][x] += b" " + v[x]
+                            new_data[k][x] += b"  " + v[x]
                     else:
                         new_data[k] = v
     # fill in the blanks
