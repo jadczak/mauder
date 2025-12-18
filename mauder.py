@@ -98,7 +98,7 @@ def main(args: list) -> int:
             summary_write_end = time()
     else:
         print("No product codes provided.")
-        return ERROR
+        return FAILURE
 
     if arguments.test:
         total_size, read_time = test_speed([device_dir, foitext_dir, patient_problem_dir, patient_codes_dir])
@@ -120,7 +120,7 @@ def main(args: list) -> int:
             print(f"{'File Parsing':20}{parsing_time:<20.3f}{parsing_throughput:<20.3f}{parsing_efficiency:<20.2%}")
             print(f"{'Multiprocessing pool size':40}{arguments.procs}")
             print(f"{'Time to write maude file':40}{maude_writing_time:.3f}s")
-            print(f"{'Time to summarize date':40}{summarize_time:.3f}s")
+            print(f"{'Time to summarize data':40}{summarize_time:.3f}s")
             print(f"{'Time to write summary':40}{summary_write_time:.3f}s")
             print(f"{'Total processing time':40}{total_time:.3f}s")
         else:
@@ -154,7 +154,7 @@ def write_maude_data(file: pathlib.Path, maude_data: MaudeData, header: Header) 
     dump maude data to file
     """
     print("writing output to disk")
-    # NOTE: python's csv module is substanially slower than raw writing to disk.
+    # NOTE: python's csv module is substantially slower than raw writing to disk.
     with open(file, "w", encoding="utf-8") as f:
         # There doesn't seem to be a way to make pyright happy with the conversion from
         # list[bytes] to list[str].  It ignores typing's cast() function, so for now we
@@ -171,7 +171,7 @@ def write_maude_data_bytes(file: pathlib.Path, maude_data: MaudeData, header: He
     dump maude data to file
     """
     print("writing output to disk")
-    # NOTE: python's csv module is substanially slower than raw writing to disk.
+    # NOTE: python's csv module is substantially slower than raw writing to disk.
     with open(file, "wb") as f:
         f.write(b"\t".join(header))
         f.write(b"\n")
@@ -230,7 +230,7 @@ def fill_blank_data(new_data: MaudeData, size: int, keys_to_update: set) -> Maud
 
 def extend_data(maude_data: MaudeData, new_data: MaudeData) -> MaudeData:
     """
-    This is more of the MAUDE files being wonky at times.  There are no guarentees
+    This is more of the MAUDE files being wonky at times.  There are no guarantees
     that a key that is parsed from a given set of data is going to show up in the
     device files.  So as new data is parsed, we keep it separate and then combine
     with the original data after.
@@ -401,7 +401,7 @@ def parse_device_chunk_reg_codes(
 
 def parse_general_chunk(file: pathlib.Path, start: int, end: int, keys: set[int], line_len: int) -> MaudeData:
     """
-    File parsing based on the specifed start and end bytes in the file.
+    File parsing based on the specified start and end bytes in the file.
     """
     RN = -2
     maude_data: MaudeData = {}
@@ -537,7 +537,7 @@ def parse_patient_problems(
     header_add: Header = []
     line_len: int = -1
     maude_keys: set[int] = set(maude_data.keys())  # can't pickle dict_keys for starmap.
-    print("Seaching for patient files")
+    print("Searching for patient files")
     for file in path.iterdir():
         if "patient" not in file.name.lower():
             print(f"skipping non-patient file {file.name}")
@@ -687,7 +687,7 @@ def parse_patient_chunk_int(
 
 def summarize_data(header: Header, maude_data: MaudeData) -> tuple[int, int, SummaryData]:
     """
-    Counts the problems encounted in the analyzed dataset.
+    Counts the problems encountered in the analyzed dataset.
     """
     problem_idx = header.index(b"PROBLEM_CODE")
     n_reports = len(maude_data)
@@ -812,7 +812,7 @@ def print_long_help():
 
     https://www.fda.gov/medical-devices/medical-device-reporting-mdr-how-report-medical-device-problems/mdr-data-files
 
-    for the utility to work files need to be placed in the skeleton director as follows:
+    for the utility to work files need to be placed in the skeleton directory as follows:
     .
     └── mdr-data-files/
         ├── device
