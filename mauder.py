@@ -1,14 +1,16 @@
 from __future__ import annotations
+from collections import defaultdict
+from enum import Enum, auto
+from math import ceil
 from sys import argv, exit
 from time import time, strftime
-from enum import Enum, auto
 import argparse
 import multiprocessing
 import multiprocessing.pool
 import pathlib
 import textwrap
 
-__version__ = 0.8
+__version__ = 0.9
 
 # type aliases
 # NOTE: the dictionary keys are int instead of bytes because it is faster.
@@ -19,6 +21,7 @@ __version__ = 0.8
 MaudeData = dict[int, list[bytes]]
 Header = list[bytes]
 PatientCodes = dict[bytes, bytes]
+SummaryData = dict[bytes, int]
 PoolType = multiprocessing.pool.Pool
 
 SUCCESS = 0
@@ -74,17 +77,25 @@ def main(args: list) -> int:
         )
         pool.close()
         if arguments.test:
-            end = time()
-        codes = "-".join([c for c in arguments.codes])
-        file = output_dir / rf"{strftime('%Y%m%d%H%M%S')}-{codes}.txt"
+            parse_end = time()
         if err := length_check(maude_data, header):
             print("Data parsing error.")
-            print("The length of the header and the number columns do not matcher.")
+            print("The length of the header and the number columns do not match.")
             print("Report this error to https://www.github.com/jadczak/mauder")
             return err
-        write_maude_data_bytes(file, maude_data, header)
+        codes = "-".join([c for c in arguments.codes])
+        now = strftime("%Y%m%d%H%M%S")
+        maude_file = output_dir / rf"{now}-{codes}.txt"
+        write_maude_data_bytes(maude_file, maude_data, header)
         if arguments.test:
-            write_end = time()
+            maude_write_end = time()
+        n_reports, n_problems, summary_data = summarize_data(header, maude_data)
+        if arguments.test:
+            summarize_end = time()
+        summary_file = output_dir / rf"{now}-{codes}-summary.txt"
+        write_summary_data(summary_file, n_reports, n_problems, summary_data, product_codes, now)
+        if arguments.test:
+            summary_write_end = time()
     else:
         print("No product codes provided.")
         return ERROR
@@ -93,20 +104,24 @@ def main(args: list) -> int:
         total_size, read_time = test_speed([device_dir, foitext_dir, patient_problem_dir, patient_codes_dir])
         read_throughput = total_size / read_time / GIGA
         read_efficiency = read_throughput / read_throughput
-        parsing_time = end - start
+        parsing_time = parse_end - start
+        maude_writing_time = maude_write_end - parse_end
+        summarize_time = summarize_end - maude_write_end
+        summary_write_time = summary_write_end - summarize_end
+        total_time = summary_write_end - start
         if not parsing_time:
             parsing_time = float("nan")
         parsing_throughput = total_size / parsing_time / GIGA
         parsing_efficiency = parsing_throughput / read_throughput
-        writing_time = write_end - end
-        total_time = write_end - start
         print()
         print(f"{'MODE':20}{'TIME (s)':20}{'THROUGHPUT GB/s':20}{'EFFICIENCY':20}")
         print(f"{'Raw Reading':20}{read_time:<20.3f}{read_throughput:<20.3f}{read_efficiency:<20.2%}")
         if parsing_time:
             print(f"{'File Parsing':20}{parsing_time:<20.3f}{parsing_throughput:<20.3f}{parsing_efficiency:<20.2%}")
             print(f"{'Multiprocessing pool size':40}{arguments.procs}")
-            print(f"{'Time to write text file':40}{writing_time:.3f}s")
+            print(f"{'Time to write maude file':40}{maude_writing_time:.3f}s")
+            print(f"{'Time to summarize date':40}{summarize_time:.3f}s")
+            print(f"{'Time to write summary':40}{summary_write_time:.3f}s")
             print(f"{'Total processing time':40}{total_time:.3f}s")
         else:
             print(f"{'N/A':20}{0:20.3f}{0:20.3f}{0:20.2%}")
@@ -668,6 +683,68 @@ def parse_patient_chunk_int(
                 # TODO: add some error logging.
                 pass
     return new_data
+
+
+def summarize_data(header: Header, maude_data: MaudeData) -> tuple[int, int, SummaryData]:
+    """
+    Counts the problems encounted in the analyzed dataset.
+    """
+    problem_idx = header.index(b"PROBLEM_CODE")
+    n_reports = len(maude_data)
+    n_problems = 0
+    summary_data = defaultdict(int)
+    sep = b"  "  # see parse_patient_chunk_int() and parse_patient_chunk_dec()
+    for report in maude_data.values():
+        for problem in report[problem_idx].split(sep):
+            summary_data[problem] += 1
+            n_problems += 1
+    return n_reports, n_problems, summary_data
+
+
+def write_summary_data(
+    file: pathlib.Path,
+    n_reports: int,
+    n_problems: int,
+    summary_data: SummaryData,
+    product_codes: set(bytes),
+    timestamp: str,
+) -> None:
+    """
+    Writes out the summary data to the terminal and to a summary file.
+    """
+    LEFT_PAD = 50
+    RIGHT_PAD = 22
+    s = []
+    s.append(f'{"MAUDE Database Summary"}')
+    s.append(f'{""}')
+    s.append(f'{"Software version":<{LEFT_PAD}}{__version__:>{RIGHT_PAD}}')
+    s.append(f'{"Report time":<{LEFT_PAD}}{timestamp:>{RIGHT_PAD}}')
+    for x, code in enumerate(sorted(product_codes)):
+        if not x:
+            s.append(f'{"Product codes analyzed":<{LEFT_PAD}}{code.decode("utf-8"):>{RIGHT_PAD}}')
+        else:
+            s.append(f'{"":<{LEFT_PAD}}{code.decode("utf-8"):>{RIGHT_PAD}}')
+    s.append(f'{""}')
+    s.append(f'{"Number of reports":<{LEFT_PAD}}{n_reports:>{RIGHT_PAD}}')
+    s.append(f'{"Reported problems":<{LEFT_PAD}}{n_problems:>{RIGHT_PAD}}')
+    s.append(f'{""}')
+
+    for problem in sorted(summary_data, key=lambda x: summary_data[x], reverse=True):
+        problem_string = problem.decode("utf-8")
+        chunks = ceil(len(problem_string) / LEFT_PAD)
+        for chunk in range(chunks):
+            if not chunk:
+                s.append(
+                    f"{problem_string[chunk*LEFT_PAD:chunk*LEFT_PAD+LEFT_PAD]:<{LEFT_PAD}}{summary_data[problem]:>{RIGHT_PAD}}"
+                )
+            else:
+                s.append(f'{problem_string[chunk*LEFT_PAD:chunk*LEFT_PAD+LEFT_PAD]:<{LEFT_PAD}}{"":>{RIGHT_PAD}}')
+
+    with open(file, "wb") as f:
+        for line in s:
+            print(line)
+            f.write(line.encode("utf-8"))
+            f.write(b"\n")
 
 
 def test_speed(paths: list[pathlib.Path]) -> tuple[int, float]:

@@ -1,7 +1,7 @@
 # mauder
 This is a MAUDE data scraper for consolodating device data based on product code.
 
-The utility will search subdirectories for any avialable information for the product codes provided and merge it into a single file.
+The utility will search subdirectories for any available information for the product codes provided, merge the data into a single file, and provide a summary of the problems encountered.
 
 # data
 
@@ -51,11 +51,13 @@ A note about the numbers below.  The "Raw Reading" is only using a single thread
 
 ```
 MODE                TIME (s)            THROUGHPUT GB/s     EFFICIENCY
-Raw Reading         4.496               3.176               100.00%
-File Parsing        2.781               5.133               161.66%
+Raw Reading         4.418               3.232               100.00%
+File Parsing        2.690               5.307               164.20%
 Multiprocessing pool size               24
-Time to write text file                 0.325s
-Total processing time                   3.107s
+Time to write maude file                0.312s
+Time to summarize date                  0.021s
+Time to write summary                   0.003s
+Total processing time                   3.027s
 Total size of processed files           14.278 GB
 ```
 
