@@ -3,7 +3,7 @@ This is a MAUDE data scraper for consolodating device data based on product code
 
 The utility will search subdirectories for any available information for the product codes provided, merge the data into a single file, and provide a summary of the problems encountered.
 
-# data
+# Input Data
 
 Maude data can be downloaded from the FDA's [MDR Data Files](https://www.fda.gov/medical-devices/medical-device-reporting-mdr-how-report-medical-device-problems/mdr-data-files).
 
@@ -35,6 +35,14 @@ NOTE: the 'patientproblemdata.zip' archive contains the file named 'patientprobl
 
 Mauder will read all of the data it can find, so if you add 10 years worth of records, it's going to take a minute depending on how fast your computer is.
 
+# Output Data
+An output folder is created in the script directory and two files are going to be created for a run.
+
+The first file is all of the data stiched together into a single tab delimited file.
+
+The second file is a summary of what was run and a breakdown of issues based on the problems reported.  This summary is printed out to terminal as well.
+
+
 # Mauder Output Quirks
 Mauder is report based.  A quirk of this decision is that in the event that multiple patients are involved in the report, it shows up as a single line item in the output.  You will be able to distinguish how many individuals were involved in the report by looking at the `PATIENT_SEQUENCE_NO` column.  Most of the time (but not always) this sequence number starts at 1, so if you only see 1's in that column there was only one person involved.  If you see a 0 in the column, it means you are in the "some of the time" category of patient indexing.
 
@@ -43,7 +51,9 @@ Another quirk is a report can have multiple patient problems associated with it,
 Lastly there are "changes".  For the DEVICE, foitext, and the patient files there are separate files that have updates to "the existing base records".  That stuff will get tacked on with the word "change:" in the locations where some more data was added.
 
 # Performance
-Current performance on a i7-13700k with a Samsung 980 PRO NVMe.
+Note: PyPy is consistently and significantly slower than CPython for this program.  If you are a PyPy user, consider using CPython for this program.
+
+Current performance on a i7-13700k with a Samsung 980 PRO NVMe is below.
 
 Product code OYC
 
@@ -80,3 +90,6 @@ Dataset retrieved July 2025:
 
 # Other Stuff
 Multiprocessing reports the number of logical cores available on the system, not the number of physical cores.  Running Mauder with all of the logical cores doesn't improve performance over using just the physical cores so it seems dumb to be using anything more than the number of physical cores.  However, having an external dependancy on `psutil` just to get an accurate number of physical cores in a system seems dumber.  Use the `-p` option to have Mauder use whatever you want for a Pool size if the number of logical cores doesn't jive with you.
+
+# Versioning
+Version numbers are arbitrary.  I bump it when some bugs are fixed, performance is improved, or some feature has been added and I feel like it's good enough for a new number.

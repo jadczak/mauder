@@ -10,7 +10,7 @@ import multiprocessing.pool
 import pathlib
 import textwrap
 
-__version__ = 0.9
+__version__ = 0.10
 
 # type aliases
 # NOTE: the dictionary keys are int instead of bytes because it is faster.
