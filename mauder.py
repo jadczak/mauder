@@ -19,6 +19,7 @@ __version__ = 0.9
 #       the bytes to the point that it ends beating out the bytes -> int conversion
 #       that has to be done on each line.
 MaudeData = dict[int, list[bytes]]
+MaudeKeys = set[int]
 Header = list[bytes]
 PatientCodes = dict[bytes, bytes]
 SummaryData = dict[bytes, int]
@@ -69,11 +70,11 @@ def main(args: list) -> int:
         product_codes = {bytes(arg, encoding="utf-8") for arg in arguments.codes}
         n_chunks = arguments.procs
         pool = multiprocessing.Pool(n_chunks)
-        maude_data, header = parse_device_files(device_dir, product_codes, n_chunks, pool)
-        maude_data, header = parse_foitext(foitext_dir, maude_data, header, n_chunks, pool)
+        maude_data, header, maude_keys = parse_device_files(device_dir, product_codes, n_chunks, pool)
+        maude_data, header = parse_foitext(foitext_dir, maude_data, header, maude_keys, n_chunks, pool)
         patient_codes = parse_patient_codes(patient_codes_dir)
         maude_data, header = parse_patient_problems(
-            patient_problem_dir, maude_data, header, patient_codes, n_chunks, pool
+            patient_problem_dir, maude_data, header, maude_keys, patient_codes, n_chunks, pool
         )
         pool.close()
         if arguments.test:
@@ -273,7 +274,7 @@ def get_header(file: pathlib.Path) -> Header:
 
 def parse_device_files(
     path: pathlib.Path, product_codes: set[bytes], n_chunks: int, pool: PoolType
-) -> tuple[MaudeData, Header]:
+) -> tuple[MaudeData, Header, MaudeKeys]:
     """
     Searches through a folder and parses out data from device files for the product codes indicated.
     The MAUDE data can be screwy so we have to check for line length and deal with data showing
@@ -306,11 +307,11 @@ def parse_device_files(
             for chunk_result in chunk_results:
                 maude_data.update(chunk_result)
 
+    maude_keys = set(maude_data.keys())
     if change_file:
         print(f"reading device file: {change_file.name}")
         locations = chunk_file(change_file, n_chunks)
         tasks = []
-        maude_keys = set(maude_data.keys())
         for start, end in locations:
             tasks.append([change_file, start, end, maude_keys, line_len])
         chunk_results = pool.starmap(parse_general_chunk, tasks)
@@ -320,7 +321,7 @@ def parse_device_files(
                     byte_string = b"  Change: " + chunk_result[key][i]
                     maude_data[key][i] += byte_string
 
-    return maude_data, header
+    return maude_data, header, maude_keys
 
 
 def parse_device_chunk(
@@ -399,13 +400,13 @@ def parse_device_chunk_reg_codes(
     return maude_data
 
 
-def parse_general_chunk(file: pathlib.Path, start: int, end: int, keys: set[int], line_len: int) -> MaudeData:
+def parse_general_chunk(file: pathlib.Path, start: int, end: int, keys: MaudeKeys, line_len: int) -> MaudeData:
     """
     File parsing based on the specified start and end bytes in the file.
     """
     RN = -2
     maude_data: MaudeData = {}
-    these_keys: set[int] = set()
+    these_keys: MaudeKeys = set()
     pos: int = start
     with open(file, "rb", buffering=BUF_SIZE) as f:
         f.seek(start)
@@ -432,7 +433,7 @@ def parse_general_chunk(file: pathlib.Path, start: int, end: int, keys: set[int]
 
 
 def parse_foitext(
-    path: pathlib.Path, maude_data: MaudeData, header: Header, n_chunks: int, pool: PoolType
+    path: pathlib.Path, maude_data: MaudeData, header: Header, maude_keys: MaudeKeys, n_chunks: int, pool: PoolType
 ) -> tuple[MaudeData, Header]:
     """
     This parses out the foi text which includes all the narrative data (reporter and manufacturer lies)
@@ -443,7 +444,6 @@ def parse_foitext(
     header_add: Header = []
     new_data: MaudeData = {}
     line_len: int = -1
-    maude_keys: set[int] = set(maude_data.keys())  # can't pickle dict_keys object for starmap.
     print("Searching for foi text files")
     for file in path.iterdir():
         if "change" in file.name.lower():
@@ -525,6 +525,7 @@ def parse_patient_problems(
     path: pathlib.Path,
     maude_data: MaudeData,
     header: Header,
+    maude_keys: MaudeKeys,
     patient_codes: PatientCodes,
     n_chunks: int,
     pool: PoolType,
@@ -536,7 +537,6 @@ def parse_patient_problems(
     new_data: MaudeData = {}
     header_add: Header = []
     line_len: int = -1
-    maude_keys: set[int] = set(maude_data.keys())  # can't pickle dict_keys for starmap.
     print("Searching for patient files")
     for file in path.iterdir():
         if "patient" not in file.name.lower():
@@ -589,7 +589,7 @@ def parse_patient_chunk(
     file: pathlib.Path,
     start: int,
     end: int,
-    keys: set[int],
+    keys: MaudeKeys,
     line_len: int,
     patient_codes: PatientCodes,
     f_type: PtFileType,
@@ -604,7 +604,7 @@ def parse_patient_chunk(
 
 
 def parse_patient_chunk_dec(
-    file: pathlib.Path, start: int, end: int, keys: set[int], line_len: int, patient_codes: PatientCodes
+    file: pathlib.Path, start: int, end: int, keys: MaudeKeys, line_len: int, patient_codes: PatientCodes
 ) -> MaudeData:
     """
     The patientproblemcode.txt file is weird in a few ways.
@@ -649,7 +649,7 @@ def parse_patient_chunk_dec(
 
 
 def parse_patient_chunk_int(
-    file: pathlib.Path, start: int, end: int, keys: set[int], line_len: int, patient_codes: PatientCodes
+    file: pathlib.Path, start: int, end: int, keys: MaudeKeys, line_len: int, patient_codes: PatientCodes
 ) -> MaudeData:
     """
     The patientproblemcode.txt file is weird in a few ways.
