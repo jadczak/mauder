@@ -79,7 +79,7 @@ def main(args: list) -> int:
         pool.close()
         if arguments.test:
             parse_end = time()
-        if err := length_check(maude_data, header):
+        if len(maude_keys) and (err := length_check(maude_data, header)):
             print("Data parsing error.")
             print("The length of the header and the number columns do not match.")
             print("Report this error to https://www.github.com/jadczak/mauder")
