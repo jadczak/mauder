@@ -48,9 +48,6 @@ def main(args: list) -> int:
         parse_args(["-h"])
         return SUCCESS  # NOTE: not necessary -h will exit, for clarity only.
 
-    start: float = 0
-    end: float = 0
-    write_end: float = 0
     here = pathlib.Path(__file__).parent
     data_dir = here / "mdr-data-files"
     device_dir = data_dir / "device"
@@ -64,6 +61,11 @@ def main(args: list) -> int:
         output_dir.mkdir(parents=True)
         print(f"creating output directory: {output_dir.resolve()}")
 
+    start: float = 0
+    parse_end: float = 0
+    maude_write_end: float = 0
+    summarize_end: float = 0
+    summary_write_end: float = 0
     if arguments.codes:
         if arguments.test:
             start = time()
@@ -702,10 +704,10 @@ def write_summary_data(
         for chunk in range(chunks):
             if not chunk:
                 s.append(
-                    f"{problem_string[chunk*LEFT_PAD:chunk*LEFT_PAD+LEFT_PAD]:<{LEFT_PAD}}{summary_data[problem]:>{RIGHT_PAD}}"
+                    f"{problem_string[chunk * LEFT_PAD:chunk * LEFT_PAD + LEFT_PAD]:<{LEFT_PAD}}{summary_data[problem]:>{RIGHT_PAD}}"
                 )
             else:
-                s.append(f'{problem_string[chunk*LEFT_PAD:chunk*LEFT_PAD+LEFT_PAD]:<{LEFT_PAD}}{"":>{RIGHT_PAD}}')
+                s.append(f'{problem_string[chunk * LEFT_PAD:chunk * LEFT_PAD + LEFT_PAD]:<{LEFT_PAD}}{"":>{RIGHT_PAD}}')
 
     with open(file, "wb") as f:
         for line in s:
