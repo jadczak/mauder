@@ -25,15 +25,19 @@ The data downloaded from the website should be placed as indicated in the struct
     |   └── foitextChange.txt
     ├── patientproblemcode
     |   └── patientproblemcode.txt
-    └── patientproblemdata
-        └── patientproblemcodes.csv
-
+    ├── patientproblemdata
+    |   └── patientproblemcodes.csv
+    └── mdrfoi
+        ├── mdrfoiThru2025.txt
+        └── mdrfoiChange.txt
 ```
 
 
 NOTE: the 'patientproblemdata.zip' archive contains the file named 'patientproblemcodes.csv'.
 
-Mauder will read all of the data it can find, so if you add 10 years worth of records, it's going to take a minute depending on how fast your computer is.
+This utility will scan all available files.  Only include data as far back as you need or it may take a long time to run.
+
+Maude "add" files (e.g. deviceadd.txt) are not parsed.  These files contain the additions for the current month.
 
 # Output Data
 An output folder is created in the script directory and two files are going to be created for a run.

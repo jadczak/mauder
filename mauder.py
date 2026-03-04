@@ -10,7 +10,7 @@ import multiprocessing.pool
 import pathlib
 import textwrap
 
-__version__ = 0.11
+__version__ = 0.12
 
 # type aliases
 # NOTE: the dictionary keys are int instead of bytes because it is faster.
@@ -54,6 +54,7 @@ def main(args: list) -> int:
     foitext_dir = data_dir / "foitext"
     patient_codes_dir = data_dir / "patientproblemdata"
     patient_problem_dir = data_dir / "patientproblemcode"
+    mdrfoi_dir = data_dir / "mdrfoi"
     output_dir = pathlib.Path(arguments.output_dir)
     if not output_dir.is_absolute():
         output_dir = here / output_dir
@@ -78,6 +79,7 @@ def main(args: list) -> int:
         maude_data, header = parse_patient_problems(
             patient_problem_dir, maude_data, header, maude_keys, patient_codes, n_chunks, pool
         )
+        maude_data, header = parse_mdrfoi(mdrfoi_dir, maude_data, header, maude_keys, n_chunks, pool)
         pool.close()
         if arguments.test:
             parse_end = time()
@@ -535,6 +537,58 @@ def parse_patient_problems(
     maude_data = extend_data(maude_data, new_data)
     return maude_data, header
 
+def parse_mdrfoi(
+    path: pathlib.Path, maude_data: MaudeData, header: Header, maude_keys: MaudeKeys, n_chunks: int, pool: PoolType
+) -> tuple[MaudeData, Header]:
+    """
+    This parses out the mrdfoi text.  The mdrfoi data has the EVENT_KEY which is the thing that is searchable
+    on the fda's website.
+    """
+    change_file = None
+    header_add: Header = []
+    new_data: MaudeData = {}
+    line_len: int = -1
+    print("Searching for mdrfoi text files")
+    for file in path.iterdir():
+        if "change" in file.name.lower():
+            change_file = file
+        elif "mdrfoi" not in file.name:
+            print(f"Skipping non-mdrfoi file: {file.name}")
+        else:
+            print(f"reading mdroi file: {file.name}")
+            if not header_add:
+                this_header = get_header(file)
+                line_len = len(this_header)
+                header_add = this_header[1:]
+            locations = chunk_file(file, n_chunks)
+            tasks = []
+            for start, end in locations:
+                tasks.append([file, start, end, maude_keys, line_len])
+            chunk_results = pool.starmap(parse_general_chunk, tasks)
+            for chunk_result in chunk_results:
+                new_data.update(chunk_result)
+
+    # fill missing information
+    keys_to_update = maude_keys - new_data.keys()
+    new_data = fill_blank_data(new_data, line_len, keys_to_update)
+
+    if change_file:
+        print(f"reading mdrfoi change file: {change_file.name}")
+        locations = chunk_file(change_file, n_chunks)
+        tasks = []
+        for start, end in locations:
+            tasks.append([change_file, start, end, maude_keys, line_len])
+        chunk_results = pool.starmap(parse_general_chunk, tasks)
+        for chunk_result in chunk_results:
+            for key in chunk_result.keys() & maude_keys:
+                for i in range(line_len):
+                    byte_string = b"  Change: " + chunk_result[key][i]
+                    new_data[key][i] += byte_string
+
+    maude_data = extend_data(maude_data, new_data)
+    header.extend(header_add)
+    return maude_data, header
+
 
 def get_patient_problem_format(file: pathlib.Path) -> PtFileType:
     """
@@ -781,7 +835,7 @@ def print_long_help():
 
     https://www.fda.gov/medical-devices/medical-device-reporting-mdr-how-report-medical-device-problems/mdr-data-files
 
-    for the utility to work files need to be placed in the skeleton directory as follows:
+    For the utility to work files need to be placed in the skeleton directory as follows:
     .
     └── mdr-data-files/
         ├── device
@@ -797,13 +851,19 @@ def print_long_help():
         |   └── foitextChange.txt
         ├── patientproblemcode
         |   └── patientproblemcode.txt
-        └── patientproblemdata
-            └── patientproblemcodes.csv
+        ├── patientproblemdata
+        |   └── patientproblemcodes.csv
+        └── mdrfoi
+            ├── mdrfoiThru2025.txt
+            └── mdrfoiChange.txt
+
 
     NOTE: the 'patientproblemdata.zip' archive contains the file named 'patientproblemcodes.csv'.
 
     This utility will scan all available files.  Only include data as far back as you need or
-    it may take a long time to run."""
+    it may take a long time to run.
+
+    Maude "add" files (e.g. deviceadd.txt) are not parsed.  These files contain the additions for the current month."""
     )
     print(long_help)
 
