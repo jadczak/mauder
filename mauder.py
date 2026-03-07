@@ -158,10 +158,9 @@ def length_check(maude_data: MaudeData, header: Header) -> int:
     """
     header_len = len(header)
     for key in maude_data:
-        try:
-            assert header_len == len(maude_data[key])
+        if header_len == len(maude_data[key]):
             return SUCCESS
-        except AssertionError:
+        else:
             print(f"Header length mismatch: {len(header)} != {len(maude_data[key])}")
             print(f"{key=}")
             for i, val in enumerate(maude_data[key]):
@@ -537,6 +536,7 @@ def parse_patient_problems(
     maude_data = extend_data(maude_data, new_data)
     return maude_data, header
 
+
 def parse_mdrfoi(
     path: pathlib.Path, maude_data: MaudeData, header: Header, maude_keys: MaudeKeys, n_chunks: int, pool: PoolType
 ) -> tuple[MaudeData, Header]:
@@ -800,14 +800,12 @@ def test_speed(paths: list[pathlib.Path]) -> tuple[int, float]:
 
 
 def parse_args(args: list[str]) -> argparse.Namespace:
-    description = textwrap.dedent(
-        """\
+    description = textwrap.dedent("""\
     Example:
         python mauder.py -c OYC LGZ QFG
         This will search through the available database files for all complaints
         containing any of the product codes: OYC, LGZ or QFG
-    """
-    )
+    """)
     parser = argparse.ArgumentParser(
         prog="mauder.py", formatter_class=argparse.RawDescriptionHelpFormatter, description=description
     )
@@ -825,8 +823,7 @@ def parse_args(args: list[str]) -> argparse.Namespace:
 
 
 def print_long_help():
-    long_help = textwrap.dedent(
-        """\
+    long_help = textwrap.dedent("""\
     This utility searches the mdr-data-files directory for all product codes
     provided, aggregating useful information and exporting it as tab delimited
     table.
@@ -863,8 +860,7 @@ def print_long_help():
     This utility will scan all available files.  Only include data as far back as you need or
     it may take a long time to run.
 
-    Maude "add" files (e.g. deviceadd.txt) are not parsed.  These files contain the additions for the current month."""
-    )
+    Maude "add" files (e.g. deviceadd.txt) are not parsed.  These files contain the additions for the current month.""")
     print(long_help)
 
 
