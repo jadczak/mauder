@@ -461,8 +461,8 @@ def parse_patient_codes(path: pathlib.Path) -> PatientCodes:
     RN = -2
     COLS = 2
     patient_codes = {}
-    # Special case because the FDA can't make a CSV.  These codes end up split
-    # across lines and mangled if you open the file in a text editor.
+    # Special case because the FDA couldn't make a CSV as one point in time
+    # and these codes ended up broken across multiple lines...
     patient_codes |= {b"4908": b"Hypertrophy", b"4911": b"Withdrawl Syndrome"}
     for file in path.iterdir():
         if "patient" in file.name:
