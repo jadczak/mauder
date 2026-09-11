@@ -10,7 +10,7 @@ import multiprocessing.pool
 import pathlib
 import textwrap
 
-__version__ = 0.12
+__version__ = 0.13
 
 # type aliases
 # NOTE: the dictionary keys are int instead of bytes because it is faster.
@@ -48,11 +48,13 @@ def main(args: list) -> int:
         parse_args(["-h"])
         return SUCCESS  # NOTE: not necessary -h will exit, for clarity only.
 
+    # TODO: should all the 'patientproblem...' files be dumped into a single directory
+    #       to avoid having the '...code' vs '...codes' confusion for the user?
     here = pathlib.Path(__file__).parent
     data_dir = here / "mdr-data-files"
     device_dir = data_dir / "device"
     foitext_dir = data_dir / "foitext"
-    patient_codes_dir = data_dir / "patientproblemdata"
+    patient_codes_dir = data_dir / "patientproblemcodes"
     patient_problem_dir = data_dir / "patientproblemcode"
     mdrfoi_dir = data_dir / "mdrfoi"
     output_dir = pathlib.Path(arguments.output_dir)

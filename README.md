@@ -1,5 +1,5 @@
 # mauder
-This is a MAUDE data scraper for consolodating device data based on product code.
+This is a MAUDE data scraper for consolidating device data based on product code.
 
 The utility will search subdirectories for any available information for the product codes provided, merge the data into a single file, and provide a summary of the problems encountered.
 
@@ -25,15 +25,17 @@ The data downloaded from the website should be placed as indicated in the struct
     |   └── foitextChange.txt
     ├── patientproblemcode
     |   └── patientproblemcode.txt
-    ├── patientproblemdata
-    |   └── patientproblemcodes.csv
+    ├── patientproblemcodes
+    |   └── patientproblemcodes2026.csv
     └── mdrfoi
         ├── mdrfoiThru2025.txt
         └── mdrfoiChange.txt
 ```
 
 
-NOTE: the 'patientproblemdata.zip' archive contains the file named 'patientproblemcodes.csv'.
+NOTE: Up until sometime in 2026 an archive named 'patientproblemdata.zip' contained the file named 'patientproblemcodes.csv'.
+
+NOTE 2: At some point in 2026, the naming convention for the 'patientproblemcodes.csv' now seems to have the year included.
 
 This utility will scan all available files.  Only include data as far back as you need or it may take a long time to run.
 
@@ -42,7 +44,7 @@ Maude "add" files (e.g. deviceadd.txt) are not parsed.  These files contain the 
 # Output Data
 An output folder is created in the script directory and two files are going to be created for a run.
 
-The first file is all of the data stiched together into a single tab delimited file.
+The first file is all of the data stitched together into a single tab delimited file.
 
 The second file is a summary of what was run and a breakdown of issues based on the problems reported.  This summary is printed out to terminal as well.
 
@@ -61,7 +63,7 @@ Current performance on a i7-13700k with a Samsung 980 PRO NVMe is below.
 
 Product code OYC
 
-A note about the numbers below.  The "Raw Reading" is only using a single thread to read read through each line of the files without doing any processing of the line.  The "File Parsing" is using processing pool with all the logical cores performing the parsing.  The program is run twice to generate these numbers so the file cache is hot.
+A note about the numbers below.  The "Raw Reading" is only using a single thread to read through each line of the files without doing any processing of the line.  The "File Parsing" is using processing pool with all the logical cores performing the parsing.  The program is run twice to generate these numbers so the file cache is hot.
 
 ```
 MODE                TIME (s)            THROUGHPUT GB/s     EFFICIENCY
@@ -93,7 +95,7 @@ Dataset retrieved July 2025:
 - patientproblemcode.txt
 
 # Other Stuff
-Multiprocessing reports the number of logical cores available on the system, not the number of physical cores.  Running Mauder with all of the logical cores doesn't improve performance over using just the physical cores so it seems dumb to be using anything more than the number of physical cores.  However, having an external dependancy on `psutil` just to get an accurate number of physical cores in a system seems dumber.  Use the `-p` option to have Mauder use whatever you want for a Pool size if the number of logical cores doesn't jive with you.
+Multiprocessing reports the number of logical cores available on the system, not the number of physical cores.  Running Mauder with all of the logical cores doesn't improve performance over using just the physical cores so it seems dumb to be using anything more than the number of physical cores.  However, having an external dependency on `psutil` just to get an accurate number of physical cores in a system seems dumber.  Use the `-p` option to have Mauder use whatever you want for a Pool size if the number of logical cores doesn't jive with you.
 
 # Versioning
 Version numbers are arbitrary.  I bump it when some bugs are fixed, performance is improved, or some feature has been added and I feel like it's good enough for a new number.
