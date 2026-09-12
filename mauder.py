@@ -947,6 +947,8 @@ def print_long_help():
         |   ├── foitext2023.txt
         |   ├── ...
         |   └── foitextChange.txt
+        ├── patient
+        |   └── patientThru2025.txt
         ├── patientproblemcode
         |   └── patientproblemcode.txt
         ├── patientproblemdata
@@ -954,9 +956,10 @@ def print_long_help():
         └── mdrfoi
             ├── mdrfoiThru2025.txt
             └── mdrfoiChange.txt
+    
+    NOTE: Up until sometime in 2026 an archive named 'patientproblemdata.zip' contained the file named 'patientproblemcodes.csv'.
 
-
-    NOTE: the 'patientproblemdata.zip' archive contains the file named 'patientproblemcodes.csv'.
+    NOTE 2: At some point in 2026, the naming convention for the 'patientproblemcodes.csv' now seems to have the year included.
 
     This utility will scan all available files.  Only include data as far back as you need or
     it may take a long time to run.

@@ -23,10 +23,12 @@ The data downloaded from the website should be placed as indicated in the struct
     |   ├── foitext2023.txt
     |   ├── ...
     |   └── foitextChange.txt
+    ├── patient
+    |   └── patientThru2025.txt
     ├── patientproblemcode
     |   └── patientproblemcode.txt
-    ├── patientproblemcodes
-    |   └── patientproblemcodes2026.csv
+    ├── patientproblemdata
+    |   └── patientproblemcodes.csv
     └── mdrfoi
         ├── mdrfoiThru2025.txt
         └── mdrfoiChange.txt
