@@ -10,7 +10,7 @@ import multiprocessing.pool
 import pathlib
 import textwrap
 
-__version__ = 0.13
+__version__ = 0.14
 
 # type aliases
 # NOTE: the dictionary keys are int instead of bytes because it is faster.
@@ -56,6 +56,7 @@ def main(args: list) -> int:
     foitext_dir = data_dir / "foitext"
     patient_codes_dir = data_dir / "patientproblemcodes"
     patient_problem_dir = data_dir / "patientproblemcode"
+    patient_dir = data_dir / "patient"
     mdrfoi_dir = data_dir / "mdrfoi"
     output_dir = pathlib.Path(arguments.output_dir)
     if not output_dir.is_absolute():
@@ -81,6 +82,7 @@ def main(args: list) -> int:
         maude_data, header = parse_patient_problems(
             patient_problem_dir, maude_data, header, maude_keys, patient_codes, n_chunks, pool
         )
+        maude_data, header = parse_patient(patient_dir, maude_data, header, maude_keys, n_chunks, pool)
         maude_data, header = parse_mdrfoi(mdrfoi_dir, maude_data, header, maude_keys, n_chunks, pool)
         pool.close()
         if arguments.test:
@@ -536,6 +538,103 @@ def parse_patient_problems(
     new_data = fill_blank_data(new_data, line_len, keys_to_update)
     header.extend(header_add)
     maude_data = extend_data(maude_data, new_data)
+    return maude_data, header
+
+
+def convert_outcome(patient_data: list[bytes], code_idx: int) -> bytes:
+    converted = b""
+    for outcome_code in patient_data[code_idx].split(b";"):
+        outcome_code = outcome_code.strip(b" ")
+        if converted:
+            converted += b"; "
+        match outcome_code:
+            case b"L":
+                converted += b"Life Threatening"
+            case b"H":
+                converted += b"Hospitalization"
+            case b"S":
+                converted += b"Disability"
+            case b"C":
+                converted += b"Congenital Anomaly"
+            case b"R":
+                converted += b"Required Intervention"
+            case b"O":
+                converted += b"Other"
+            case b"*":
+                converted += b"Invalid Data"
+            case b"U":
+                converted += b"Unknown"
+            case b"I":
+                converted += b"No Information"
+            case b"A":
+                converted += b"Not Applicable"
+            case b"D":
+                converted += b"Death"
+    return converted
+
+
+def parse_patient(
+    path: pathlib.Path,
+    maude_data: MaudeData,
+    header: Header,
+    maude_keys: MaudeKeys,
+    n_chunks: int,
+    pool: PoolType,
+) -> tuple[MaudeData, Header]:
+    """
+    This parses the patient information for the maude data.
+    """
+    change_file = None
+    header_add: Header = []
+    new_data: MaudeData = {}
+    line_len: int = -1
+    print("Searching for patient text files")
+    for file in path.iterdir():
+        if "change" in file.name.lower():
+            change_file = file
+        elif "patient" not in file.name:
+            print(f"Skipping non-patient file: {file.name}")
+        else:
+            print(f"reading patien text file: {file.name}")
+            if not header_add:
+                this_header = get_header(file)
+                line_len = len(this_header)
+                header_add = this_header[1:]
+            locations = chunk_file(file, n_chunks)
+            tasks = []
+            for start, end in locations:
+                tasks.append([file, start, end, maude_keys, line_len])
+            chunk_results = pool.starmap(parse_general_chunk, tasks)
+            for chunk_result in chunk_results:
+                new_data.update(chunk_result)
+
+    CODE_IDX = 4
+    for value in new_data.values():
+        value[CODE_IDX] = convert_outcome(value, CODE_IDX)
+
+    # fill missing information
+    keys_to_update = maude_keys - new_data.keys()
+    new_data = fill_blank_data(new_data, line_len, keys_to_update)
+
+    if change_file:
+        print(f"reading patient change file: {change_file.name}")
+        locations = chunk_file(change_file, n_chunks)
+        tasks = []
+        for start, end in locations:
+            tasks.append([change_file, start, end, maude_keys, line_len])
+        chunk_results = pool.starmap(parse_general_chunk, tasks)
+        for chunk_result in chunk_results:
+            for key in chunk_result.keys() & maude_keys:
+                converted_outcome = convert_outcome(chunk_result[key], CODE_IDX)
+                for i in range(line_len):
+                    if i == CODE_IDX:
+                        byte_string = b"  Change: " + converted_outcome
+                    else:
+                        byte_string = b"  Change: " + chunk_result[key][i]
+                    new_data[key][i] += byte_string
+
+    maude_data = extend_data(maude_data, new_data)
+    header.extend(header_add)
     return maude_data, header
 
 
