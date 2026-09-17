@@ -10,7 +10,7 @@ import multiprocessing.pool
 import pathlib
 import textwrap
 
-__version__ = 0.14
+__version__ = 0.15
 
 # type aliases
 # NOTE: the dictionary keys are int instead of bytes because it is faster.
@@ -270,10 +270,11 @@ def parse_device_files(
             if not header:
                 header = get_header(file)
                 line_len = len(header)
+                prod_idx = header.index(b'DEVICE_REPORT_PRODUCT_CODE')
             locations = chunk_file(file, n_chunks)
             tasks = []
             for start, end in locations:
-                tasks.append([file, start, end, product_codes, fast_codes, line_len])
+                tasks.append([file, start, end, product_codes, fast_codes, line_len, prod_idx])
             chunk_results = pool.starmap(parse_device_chunk, tasks)
             for chunk_result in chunk_results:
                 maude_data.update(chunk_result)
@@ -296,7 +297,7 @@ def parse_device_files(
 
 
 def parse_device_chunk(
-    file: pathlib.Path, start: int, end: int, product_codes: set[bytes], fast_codes: bool, line_len: int
+    file: pathlib.Path, start: int, end: int, product_codes: set[bytes], fast_codes: bool, line_len: int, prod_idx: int
 ) -> MaudeData:
     """
     Helper for parsing the device data across multiple processes.
@@ -304,7 +305,7 @@ def parse_device_chunk(
     if fast_codes:
         maude_data = parse_device_chunk_fast_codes(file, start, end, product_codes, line_len)
     else:
-        maude_data = parse_device_chunk_reg_codes(file, start, end, product_codes, line_len)
+        maude_data = parse_device_chunk_reg_codes(file, start, end, product_codes, line_len, prod_idx)
     return maude_data
 
 
@@ -341,7 +342,7 @@ def parse_device_chunk_fast_codes(
 
 
 def parse_device_chunk_reg_codes(
-    file: pathlib.Path, start: int, end: int, product_codes: set[bytes], line_len: int
+    file: pathlib.Path, start: int, end: int, product_codes: set[bytes], line_len: int, prod_idx: int
 ) -> MaudeData:
     """
     Normal parsing of device data looking for line's product code in the set of product codes.
@@ -349,7 +350,6 @@ def parse_device_chunk_reg_codes(
     """
     RN = -2
     REPORT_KEY = 0
-    PRODUCT_CODE = 25
     maude_data: MaudeData = {}
     pos: int = start
     with open(file, "rb", buffering=BUF_SIZE) as f:
@@ -360,7 +360,7 @@ def parse_device_chunk_reg_codes(
             split_line = line[:RN].split(b"|")
             if len(split_line) != line_len:
                 continue
-            if split_line[PRODUCT_CODE] in product_codes:
+            if split_line[prod_idx] in product_codes:
                 try:
                     key = int(split_line[REPORT_KEY])
                     maude_data[key] = split_line
@@ -951,15 +951,20 @@ def print_long_help():
         |   └── patientThru2025.txt
         ├── patientproblemcode
         |   └── patientproblemcode.txt
-        ├── patientproblemdata
+        ├── patientproblemcodes
         |   └── patientproblemcodes.csv
         └── mdrfoi
             ├── mdrfoiThru2025.txt
             └── mdrfoiChange.txt
     
-    NOTE: Up until sometime in 2026 an archive named 'patientproblemdata.zip' contained the file named 'patientproblemcodes.csv'.
+    Up until sometime in 2026 an archive named 'patientproblemdata.zip' contained the file named 'patientproblemcodes.csv'.
+    When in doubt, put the small csv file in the patientproblemcodes directory.
 
-    NOTE 2: At some point in 2026, the naming convention for the 'patientproblemcodes.csv' now seems to have the year included.
+    At some point in 2026, the naming convention for the 'patientproblemcodes.csv' now seems to have the year included.
+    Add the most recent year to the directory to ensure up to date codes are parsed.
+
+    The DEVICE files had additional columns added in december of 2025.  If you have a DEVICE file from before
+    then you will need to re-download it, otherwise data will be dropped due to the column mismatch across files.
 
     This utility will scan all available files.  Only include data as far back as you need or
     it may take a long time to run.

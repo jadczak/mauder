@@ -27,7 +27,7 @@ The data downloaded from the website should be placed as indicated in the struct
     |   └── patientThru2025.txt
     ├── patientproblemcode
     |   └── patientproblemcode.txt
-    ├── patientproblemdata
+    ├── patientproblemcodes
     |   └── patientproblemcodes.csv
     └── mdrfoi
         ├── mdrfoiThru2025.txt
@@ -35,9 +35,11 @@ The data downloaded from the website should be placed as indicated in the struct
 ```
 
 
-NOTE: Up until sometime in 2026 an archive named 'patientproblemdata.zip' contained the file named 'patientproblemcodes.csv'.
+Up until sometime in 2026 an archive named 'patientproblemdata.zip' contained the file named 'patientproblemcodes.csv'.  When in doubt, put the small csv file in the patientproblemcodes directory.
 
-NOTE 2: At some point in 2026, the naming convention for the 'patientproblemcodes.csv' now seems to have the year included.
+At some point in 2026, the naming convention for the 'patientproblemcodes.csv' now seems to have the year included.  Add the most recent year to the directory to ensure up to date codes are parsed.
+
+The DEVICE files had additional columns added in december of 2025.  If you have a DEVICE file from before then you will need to re-download it, otherwise data will be dropped due to the column mismatch across files.
 
 This utility will scan all available files.  Only include data as far back as you need or it may take a long time to run.
 
