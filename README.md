@@ -18,6 +18,10 @@ The data downloaded from the website should be placed as indicated in the struct
     |   ├── DEVICE2022.txt
     |   ├── ...
     |   └── DEVICEChange.txt
+    ├── deviceproblemcodes
+    |   └── deviceproblemcodes2025.txt
+    ├── foidevproblem
+    |   └── foidevproblem.txt
     ├── foitext
     |   ├── foitext.txt
     |   ├── foitext2023.txt
@@ -38,6 +42,8 @@ The data downloaded from the website should be placed as indicated in the struct
 Up until sometime in 2026 an archive named 'patientproblemdata.zip' contained the file named 'patientproblemcodes.csv'.  When in doubt, put the small csv file in the patientproblemcodes directory.
 
 At some point in 2026, the naming convention for the 'patientproblemcodes.csv' now seems to have the year included.  Add the most recent year to the directory to ensure up to date codes are parsed.
+
+Both foidevproblem and patientproblemcode have "...thruYYYY.zip" files.  Don't use these if they foidevproblem.zip and patientproblemcode.zip archives are roughly equivalent in size.  There is a lot of overlap and duplicate data if you end up using both files currently as it is unclear which set of data should be considered the authoritative record.
 
 The DEVICE files had additional columns added in december of 2025.  If you have a DEVICE file from before then you will need to re-download it, otherwise data will be dropped due to the column mismatch across files.
 

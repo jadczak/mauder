@@ -10,7 +10,7 @@ import multiprocessing.pool
 import pathlib
 import textwrap
 
-__version__ = 0.15
+__version__ = 0.16
 
 # type aliases
 # NOTE: the dictionary keys are int instead of bytes because it is faster.
@@ -21,7 +21,7 @@ __version__ = 0.15
 MaudeData = dict[int, list[bytes]]
 MaudeKeys = set[int]
 Header = list[bytes]
-PatientCodes = dict[bytes, bytes]
+ProblemCodes = dict[bytes, bytes]
 SummaryData = dict[bytes, int]
 PoolType = multiprocessing.pool.Pool
 
@@ -54,6 +54,8 @@ def main(args: list) -> int:
     data_dir = here / "mdr-data-files"
     device_dir = data_dir / "device"
     foitext_dir = data_dir / "foitext"
+    device_codes_dir = data_dir / "deviceproblemcodes"
+    device_problem_dir = data_dir / "foidevproblem"
     patient_codes_dir = data_dir / "patientproblemcodes"
     patient_problem_dir = data_dir / "patientproblemcode"
     patient_dir = data_dir / "patient"
@@ -78,8 +80,12 @@ def main(args: list) -> int:
         pool = multiprocessing.Pool(n_chunks)
         maude_data, header, maude_keys = parse_device_files(device_dir, product_codes, n_chunks, pool)
         maude_data, header = parse_foitext(foitext_dir, maude_data, header, maude_keys, n_chunks, pool)
-        patient_codes = parse_patient_codes(patient_codes_dir)
-        maude_data, header = parse_patient_problems(
+        device_codes = parse_problem_codes(device_codes_dir)
+        maude_data, header = parse_problems(
+            device_problem_dir, maude_data, header, maude_keys, device_codes, n_chunks, pool
+        )
+        patient_codes = parse_problem_codes(patient_codes_dir)
+        maude_data, header = parse_problems(
             patient_problem_dir, maude_data, header, maude_keys, patient_codes, n_chunks, pool
         )
         maude_data, header = parse_patient(patient_dir, maude_data, header, maude_keys, n_chunks, pool)
@@ -270,7 +276,7 @@ def parse_device_files(
             if not header:
                 header = get_header(file)
                 line_len = len(header)
-                prod_idx = header.index(b'DEVICE_REPORT_PRODUCT_CODE')
+                prod_idx = header.index(b"DEVICE_REPORT_PRODUCT_CODE")
             locations = chunk_file(file, n_chunks)
             tasks = []
             for start, end in locations:
@@ -335,7 +341,7 @@ def parse_device_chunk_fast_codes(
                         maude_data[key] = split_line
                     except ValueError:
                         # very seldom, the thing in the leftmost column isn't a number.
-                        # TODO: add some error logging here so we aren't failing siletly.
+                        # TODO: add some error logging here so we aren't failing silently.
                         pass
 
     return maude_data
@@ -457,21 +463,17 @@ def parse_foitext(
     return maude_data, header
 
 
-def parse_patient_codes(path: pathlib.Path) -> PatientCodes:
+def parse_problem_codes(path: pathlib.Path) -> ProblemCodes:
     """
     Patient outcomes are encoded for reasons that are beyond me.  This creates
     the lookup for turning a patient code into the human readable translation.
     """
     RN = -2
     COLS = 2
-    patient_codes = {}
-    # Special case because the FDA couldn't make a CSV as one point in time
-    # and these codes ended up broken across multiple lines...
-    patient_codes |= {b"4908": b"Hypertrophy", b"4911": b"Withdrawl Syndrome"}
+    problem_codes: ProblemCodes = {}
     for file in path.iterdir():
-        if "patient" in file.name:
-            print(f"reading patient code file: {file.name}")
-            # with open(file, "rb") as f:
+        if "problemcodes" in file.name:
+            print(f"reading problem codes file: {file.name}")
             with open(file, "rb", buffering=BUF_SIZE) as f:
                 header = f.readline().split(b",")
                 header_len = len(header)
@@ -487,43 +489,71 @@ def parse_patient_codes(path: pathlib.Path) -> PatientCodes:
                     code = line[:idx]
                     problem = line[idx + 1 :]  # skip the comma
                     problem = problem.lstrip(b'"').rstrip(b'"')  # more MAUDE weirdness.
-                    patient_codes[code] = problem
+                    problem_codes[code] = problem
 
-    return patient_codes
+    return problem_codes
 
 
-def parse_patient_problems(
+def parse_problems(
     path: pathlib.Path,
     maude_data: MaudeData,
     header: Header,
     maude_keys: MaudeKeys,
-    patient_codes: PatientCodes,
+    problem_codes: ProblemCodes,
     n_chunks: int,
     pool: PoolType,
 ) -> tuple[MaudeData, Header]:
     """
-    This parses the patient problems (outcomes) for the maude data.  Patient outcomes
-    are all splatted into a single file instead of being broken up by year.
+    This parses the problem data for the maude data.  There are two kinds of problems.
+    Patient problems and device problems.  These files are generally in the same format with
+    everything splatted into a single file instead of being broken up by year.
+
+    The one exception, is there is no header for the foidevproblem file.
     """
     new_data: MaudeData = {}
     header_add: Header = []
     line_len: int = -1
-    print("Searching for patient files")
+    print("Searching for problem files")
     for file in path.iterdir():
-        if "patient" not in file.name.lower():
-            print(f"skipping non-patient file {file.name}")
-        else:
-            print(f"reading patient problem file: {file.name}")
+        is_patient = "patient" in file.name.lower()
+        is_device = "devproblem" in file.name.lower()
+        if is_patient or is_device:
+            print(f"reading problem file: {file.name}")
             if not header_add:
                 this_header = get_header(file)
+                if this_header[0].isdigit():
+                    # the foidev problems don't have a header currently, so we manually
+                    # need to add it or we risk losing the first entry.
+                    missing_header = True
+                    for i, col_name in enumerate(this_header):
+                        match i:
+                            case 0:
+                                this_header[i] = b"MDR_REPORT_KEY"
+                            case 1:
+                                this_header[i] = b"DEVICE_PROBLEM_CODE"
+                            case _:
+                                this_header[i] = b"DEVPROBLEM_UNK_" + str(i).encode("utf-8")
+                else:
+                    missing_header = False
+                for i, col_name in enumerate(this_header):
+                    # the problem code is in a different location for the patient files
+                    # than the device files.  Find it dynamically rather than hard coding
+                    # since hard coding indices has proven to be a problem in the past.
+                    if b"PROBLEM_CODE" in col_name:
+                        problem_idx = i
+                        break
                 line_len = len(this_header)
                 header_add = this_header[1:]
             locations = chunk_file(file, n_chunks)
             tasks = []
-            fmt = get_patient_problem_format(file)
-            for start, end in locations:
-                tasks.append([file, start, end, maude_keys, line_len, patient_codes, fmt])
-            chunk_results = pool.starmap(parse_patient_chunk, tasks)
+            for i, (start, end) in enumerate(locations):
+                if i == 0 and missing_header:
+                    # we don't have a header, in the file so we need to start at byte 0
+                    # instead of the first byte of the second line.
+                    tasks.append([file, 0, end, maude_keys, line_len, problem_codes, problem_idx])
+                else:
+                    tasks.append([file, start, end, maude_keys, line_len, problem_codes, problem_idx])
+            chunk_results = pool.starmap(parse_problem_chunk, tasks)
             for chunk_result in chunk_results:
                 # we need to manually merge here because an mdr key can show up in adjacent
                 # chunks due to each line getting it's own problem code
@@ -533,6 +563,9 @@ def parse_patient_problems(
                             new_data[k][x] += b"  " + v[x]
                     else:
                         new_data[k] = v
+        else:
+            print(f"skipping non-problem file {file.name}")
+
     # fill in the blanks
     keys_to_update = maude_keys - new_data.keys()
     new_data = fill_blank_data(new_data, line_len, keys_to_update)
@@ -595,7 +628,7 @@ def parse_patient(
         elif "patient" not in file.name:
             print(f"Skipping non-patient file: {file.name}")
         else:
-            print(f"reading patien text file: {file.name}")
+            print(f"reading patient text file: {file.name}")
             if not header_add:
                 this_header = get_header(file)
                 line_len = len(this_header)
@@ -706,83 +739,25 @@ def get_patient_problem_format(file: pathlib.Path) -> PtFileType:
             return PtFileType.INT
 
 
-def parse_patient_chunk(
+def parse_problem_chunk(
     file: pathlib.Path,
     start: int,
     end: int,
     keys: MaudeKeys,
     line_len: int,
-    patient_codes: PatientCodes,
-    f_type: PtFileType,
+    problem_codes: ProblemCodes,
+    problem_idx: int,
 ) -> MaudeData:
     """
-    Helper function because of capricious changes to file formats.
-    """
-    if f_type == PtFileType.DEC:
-        return parse_patient_chunk_dec(file, start, end, keys, line_len, patient_codes)
-    elif f_type == PtFileType.INT:
-        return parse_patient_chunk_int(file, start, end, keys, line_len, patient_codes)
-
-
-def parse_patient_chunk_dec(
-    file: pathlib.Path, start: int, end: int, keys: MaudeKeys, line_len: int, patient_codes: PatientCodes
-) -> MaudeData:
-    """
-    The patientproblemcode.txt file is weird in a few ways.
-    1)  the report keys are decimal instead of ints
-    2)  report keys show up multiple times in the file because
-        patients can have multiple problems associated with them
-    3)  Any changes show up in this file instead of in a separate
-        "change" file.
-    """
-
-    RN = -2
-    DOT_ZERO = -2
-    REPORT_KEY = 0
-    SPACE = 0
-    PROBLEM_CODE = 2
-    new_data: MaudeData = {}
-    pos: int = start
-    with open(file, "rb", buffering=BUF_SIZE) as f:
-        f.seek(start)
-        while pos < end:
-            line = f.readline()
-            pos += len(line)
-            split_line = line[:RN].split(b"|")
-            if len(split_line) != line_len:
-                continue
-            try:
-                # NOTE: slicing is faster than int(float(string))
-                key = int(split_line[REPORT_KEY][SPACE:DOT_ZERO])
-                if key in keys:
-                    split_line[PROBLEM_CODE] = patient_codes[split_line[PROBLEM_CODE]]
-                    if key in new_data:
-                        for x in range(1, line_len):
-                            byte_string = b"  " + split_line[x]
-                            new_data[key][x] += byte_string
-                    else:
-                        new_data[key] = split_line
-
-            except IndexError:
-                # TODO: add some error logging.
-                pass
-    return new_data
-
-
-def parse_patient_chunk_int(
-    file: pathlib.Path, start: int, end: int, keys: MaudeKeys, line_len: int, patient_codes: PatientCodes
-) -> MaudeData:
-    """
-    The patientproblemcode.txt file is weird in a few ways.
+    The problem file is weird in a few ways.
     1)  report keys show up multiple times in the file because
-        patients can have multiple problems associated with them
+        patients/devices can have multiple problems associated with them
     2)  Any changes show up in this file instead of in a separate
         "change" file.
     """
 
     RN = -2
     REPORT_KEY = 0
-    PROBLEM_CODE = 2
     new_data: MaudeData = {}
     pos: int = start
     with open(file, "rb", buffering=BUF_SIZE) as f:
@@ -796,7 +771,7 @@ def parse_patient_chunk_int(
             try:
                 key = int(split_line[REPORT_KEY])
                 if key in keys:
-                    split_line[PROBLEM_CODE] = patient_codes[split_line[PROBLEM_CODE]]
+                    split_line[problem_idx] = problem_codes[split_line[problem_idx]]
                     if key in new_data:
                         for x in range(1, line_len):
                             byte_string = b"  " + split_line[x]
@@ -817,7 +792,7 @@ def summarize_data(header: Header, maude_data: MaudeData) -> tuple[int, int, Sum
     n_reports = len(maude_data)
     n_problems = 0
     summary_data = defaultdict(int)
-    sep = b"  "  # see parse_patient_chunk_int() and parse_patient_chunk_dec()
+    sep = b"  "  # see parse_problem_chunk()
     for report in maude_data.values():
         for problem in report[problem_idx].split(sep):
             summary_data[problem] += 1
@@ -942,6 +917,10 @@ def print_long_help():
         |   ├── DEVICE2022.txt
         |   ├── ...
         |   └── DEVICEChange.txt
+        ├── deviceproblemcodes
+        |   └── deviceproblemcodes2025.txt
+        ├── foidevproblem
+        |   └── foidevproblem.txt
         ├── foitext
         |   ├── foitext.txt
         |   ├── foitext2023.txt
@@ -963,7 +942,12 @@ def print_long_help():
     At some point in 2026, the naming convention for the 'patientproblemcodes.csv' now seems to have the year included.
     Add the most recent year to the directory to ensure up to date codes are parsed.
 
-    The DEVICE files had additional columns added in december of 2025.  If you have a DEVICE file from before
+    Both foidevproblem and patientproblemcode have "...thruYYYY.zip" files.  Don't use these if they foidevproblem.zip
+    and patientproblemcode.zip archives are roughly equivalent in size.  There is a lot of overlap and duplicate data
+    if you end up using both files currently as it is unclear which set of data should be considered the authoritative
+    record.
+
+    The DEVICE files had additional columns added in December of 2025.  If you have a DEVICE file from before
     then you will need to re-download it, otherwise data will be dropped due to the column mismatch across files.
 
     This utility will scan all available files.  Only include data as far back as you need or

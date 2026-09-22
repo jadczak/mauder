@@ -32,3 +32,6 @@ profile.*
 
 # requirements
 !requirements.txt
+
+# IDE files
+.idea/
