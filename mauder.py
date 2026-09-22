@@ -10,7 +10,7 @@ import multiprocessing.pool
 import pathlib
 import textwrap
 
-__version__ = 0.16
+__version__ = 0.17
 
 # type aliases
 # NOTE: the dictionary keys are int instead of bytes because it is faster.
@@ -22,7 +22,6 @@ MaudeData = dict[int, list[bytes]]
 MaudeKeys = set[int]
 Header = list[bytes]
 ProblemCodes = dict[bytes, bytes]
-SummaryData = dict[bytes, int]
 PoolType = multiprocessing.pool.Pool
 
 SUCCESS = 0
@@ -36,6 +35,27 @@ BUF_SIZE = 10 * MEGA
 class PtFileType(Enum):
     INT = auto()
     DEC = auto()
+
+
+class SummaryData:
+    __slots__ = (
+        "n_reports",
+        "n_pt_problems",
+        "n_dev_problems",
+        "n_pt_outcomes",
+        "pt_data",
+        "device_data",
+        "outcome_data",
+    )
+
+    def __init__(self):
+        self.n_reports = 0
+        self.n_pt_problems = 0
+        self.n_dev_problems = 0
+        self.n_pt_outcomes = 0
+        self.pt_data = defaultdict(int)
+        self.device_data = defaultdict(int)
+        self.outcome_data = defaultdict(int)
 
 
 def main(args: list) -> int:
@@ -104,11 +124,11 @@ def main(args: list) -> int:
         write_maude_data_bytes(maude_file, maude_data, header)
         if arguments.test:
             maude_write_end = time()
-        n_reports, n_problems, summary_data = summarize_data(header, maude_data)
+        summary_data = summarize_data(header, maude_data)
         if arguments.test:
             summarize_end = time()
         summary_file = output_dir / rf"{now}-{codes}-summary.txt"
-        write_summary_data(summary_file, n_reports, n_problems, summary_data, product_codes, now)
+        write_summary_data(summary_file, summary_data, product_codes, now)
         if arguments.test:
             summary_write_end = time()
     else:
@@ -784,26 +804,42 @@ def parse_problem_chunk(
     return new_data
 
 
-def summarize_data(header: Header, maude_data: MaudeData) -> tuple[int, int, SummaryData]:
+def summarize_data(header: Header, maude_data: MaudeData) -> SummaryData:
     """
     Counts the problems encountered in the analyzed dataset.
     """
     problem_idx = header.index(b"PROBLEM_CODE")
-    n_reports = len(maude_data)
-    n_problems = 0
-    summary_data = defaultdict(int)
+    device_idx = header.index(b"DEVICE_PROBLEM_CODE")
+    outcome_idx = header.index(b"SEQUENCE_NUMBER_OUTCOME")
+
+    summary_data = SummaryData()
+    summary_data.n_reports = len(maude_data)
+
     sep = b"  "  # see parse_problem_chunk()
+    sep_2 = b"  Change: "  # see parse_general_chunk()
+    sep_3 = b"; "  # see convert_outcome()
     for report in maude_data.values():
-        for problem in report[problem_idx].split(sep):
-            summary_data[problem] += 1
-            n_problems += 1
-    return n_reports, n_problems, summary_data
+        for pt_problem in report[problem_idx].split(sep):
+            if not pt_problem:
+                pt_problem = b"Blank"
+            summary_data.pt_data[pt_problem] += 1
+            summary_data.n_pt_problems += 1
+        for dev_problem in report[device_idx].split(sep):
+            if not dev_problem:
+                dev_problem = b"Blank"
+            summary_data.device_data[dev_problem] += 1
+            summary_data.n_dev_problems += 1
+        for split_outcome in report[outcome_idx].split(sep_2):
+            for pt_outcome in split_outcome.split(sep_3):
+                if not pt_outcome:
+                    pt_outcome = b"Blank"
+                summary_data.outcome_data[pt_outcome] += 1
+                summary_data.n_pt_outcomes += 1
+    return summary_data
 
 
 def write_summary_data(
     file: pathlib.Path,
-    n_reports: int,
-    n_problems: int,
     summary_data: SummaryData,
     product_codes: set[bytes],
     timestamp: str,
@@ -811,8 +847,8 @@ def write_summary_data(
     """
     Writes out the summary data to the terminal and to a summary file.
     """
-    LEFT_PAD = 50
-    RIGHT_PAD = 22
+    LEFT_PAD = 76
+    RIGHT_PAD = 16
     s = []
     s.append(f'{"MAUDE Database Summary"}')
     s.append(f'{""}')
@@ -824,17 +860,52 @@ def write_summary_data(
         else:
             s.append(f'{"":<{LEFT_PAD}}{code.decode("utf-8"):>{RIGHT_PAD}}')
     s.append(f'{""}')
-    s.append(f'{"Number of reports":<{LEFT_PAD}}{n_reports:>{RIGHT_PAD}}')
-    s.append(f'{"Reported problems":<{LEFT_PAD}}{n_problems:>{RIGHT_PAD}}')
+    s.append(f'{"Number of reports":<{LEFT_PAD}}{summary_data.n_reports:>{RIGHT_PAD}}')
+    s.append(f'{"Number of patient problems":<{LEFT_PAD}}{summary_data.n_pt_problems:>{RIGHT_PAD}}')
+    s.append(f'{"Number of device problems":<{LEFT_PAD}}{summary_data.n_dev_problems:>{RIGHT_PAD}}')
+    s.append(f'{"Number of patient outcomes":<{LEFT_PAD}}{summary_data.n_pt_outcomes:>{RIGHT_PAD}}')
     s.append(f'{""}')
 
-    for problem in sorted(summary_data, key=lambda x: summary_data[x], reverse=True):
+    # Patient Problems
+    s.append(f'{"PATIENT PROBLEMS":^{LEFT_PAD}}')
+    s.append(f'{"-"*(LEFT_PAD+RIGHT_PAD)}')
+    for problem in sorted(summary_data.pt_data, key=lambda x: summary_data.pt_data[x], reverse=True):
         problem_string = problem.decode("utf-8")
         chunks = ceil(len(problem_string) / LEFT_PAD)
         for chunk in range(chunks):
             if not chunk:
                 s.append(
-                    f"{problem_string[chunk * LEFT_PAD:chunk * LEFT_PAD + LEFT_PAD]:<{LEFT_PAD}}{summary_data[problem]:>{RIGHT_PAD}}"
+                    f"{problem_string[chunk * LEFT_PAD:chunk * LEFT_PAD + LEFT_PAD]:<{LEFT_PAD}}{summary_data.pt_data[problem]:>{RIGHT_PAD}}"
+                )
+            else:
+                s.append(f'{problem_string[chunk * LEFT_PAD:chunk * LEFT_PAD + LEFT_PAD]:<{LEFT_PAD}}{"":>{RIGHT_PAD}}')
+    s.append(f'{""}')
+
+    # Device Problems
+    s.append(f'{"DEVICE PROBLEMS":^{LEFT_PAD}}')
+    s.append(f'{"-"*(LEFT_PAD+RIGHT_PAD)}')
+    for problem in sorted(summary_data.device_data, key=lambda x: summary_data.device_data[x], reverse=True):
+        problem_string = problem.decode("utf-8")
+        chunks = ceil(len(problem_string) / LEFT_PAD)
+        for chunk in range(chunks):
+            if not chunk:
+                s.append(
+                    f"{problem_string[chunk * LEFT_PAD:chunk * LEFT_PAD + LEFT_PAD]:<{LEFT_PAD}}{summary_data.device_data[problem]:>{RIGHT_PAD}}"
+                )
+            else:
+                s.append(f'{problem_string[chunk * LEFT_PAD:chunk * LEFT_PAD + LEFT_PAD]:<{LEFT_PAD}}{"":>{RIGHT_PAD}}')
+    s.append(f'{""}')
+
+    # Patient Outcomes
+    s.append(f'{"PATIENT OUTCOMES":^{LEFT_PAD}}')
+    s.append(f'{"-"*(LEFT_PAD+RIGHT_PAD)}')
+    for problem in sorted(summary_data.outcome_data, key=lambda x: summary_data.outcome_data[x], reverse=True):
+        problem_string = problem.decode("utf-8")
+        chunks = ceil(len(problem_string) / LEFT_PAD)
+        for chunk in range(chunks):
+            if not chunk:
+                s.append(
+                    f"{problem_string[chunk * LEFT_PAD:chunk * LEFT_PAD + LEFT_PAD]:<{LEFT_PAD}}{summary_data.outcome_data[problem]:>{RIGHT_PAD}}"
                 )
             else:
                 s.append(f'{problem_string[chunk * LEFT_PAD:chunk * LEFT_PAD + LEFT_PAD]:<{LEFT_PAD}}{"":>{RIGHT_PAD}}')
