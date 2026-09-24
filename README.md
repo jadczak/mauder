@@ -3,6 +3,25 @@ This is a MAUDE data scraper for consolidating device data based on product code
 
 The utility will search subdirectories for any available information for the product codes provided, merge the data into a single file, and provide a summary of the problems encountered.
 
+Use the -l option to have all columns extracted.
+
+The following columns are aggregated by default:
+* MDR_REPORT_KEY
+* DEVICE_EVENT_KEY
+* DATE_RECEIVED
+* BRAND_NAME
+* GENERIC_NAME
+* MANUFACTURER_D_NAME
+* MODEL_NUMBER
+* FOI_TEXT
+* PROBLEM_CODE
+* SEQUENCE_NUMBER_OUTCOME
+* EVENT_KEY
+* ADVERSE_EVENT_FLAG
+* PRODUCT_PROBLEM_FLAG
+* TYPE_OF_REPORT
+* PMA_PMN_NUM
+
 # Input Data
 
 Maude data can be downloaded from the FDA's [MDR Data Files](https://www.fda.gov/medical-devices/medical-device-reporting-mdr-how-report-medical-device-problems/mdr-data-files).

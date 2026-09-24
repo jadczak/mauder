@@ -10,7 +10,7 @@ import multiprocessing.pool
 import pathlib
 import textwrap
 
-__version__ = 0.17
+__version__ = 0.18
 
 # type aliases
 # NOTE: the dictionary keys are int instead of bytes because it is faster.
@@ -121,7 +121,29 @@ def main(args: list) -> int:
         codes = "-".join([c for c in arguments.codes])
         now = strftime("%Y%m%d%H%M%S")
         maude_file = output_dir / rf"{now}-{codes}.txt"
-        write_maude_data_bytes(maude_file, maude_data, header)
+        idxs = list(range(len(header)))
+        if not arguments.long:
+            idxs = []
+            columns = (
+                b"MDR_REPORT_KEY",
+                b"DEVICE_EVENT_KEY",
+                b"DATE_RECEIVED",
+                b"BRAND_NAME",
+                b"GENERIC_NAME",
+                b"MANUFACTURER_D_NAME",
+                b"MODEL_NUMBER",
+                b"FOI_TEXT",
+                b"PROBLEM_CODE",
+                b"SEQUENCE_NUMBER_OUTCOME",
+                b"EVENT_KEY",
+                b"ADVERSE_EVENT_FLAG",
+                b"PRODUCT_PROBLEM_FLAG",
+                b"TYPE_OF_REPORT",
+                b"PMA_PMN_NUM",
+            )
+            for column in columns:
+                idxs.append(header.index(column))
+        write_maude_data_bytes(maude_file, maude_data, header, idxs)
         if arguments.test:
             maude_write_end = time()
         summary_data = summarize_data(header, maude_data)
@@ -165,17 +187,17 @@ def main(args: list) -> int:
     return SUCCESS
 
 
-def write_maude_data_bytes(file: pathlib.Path, maude_data: MaudeData, header: Header) -> None:
+def write_maude_data_bytes(file: pathlib.Path, maude_data: MaudeData, header: Header, idxs: list[int]) -> None:
     """
     dump maude data to file
     """
     print("writing output to disk")
     # NOTE: python's csv module is substantially slower than raw writing to disk.
     with open(file, "wb") as f:
-        f.write(b"\t".join(header))
+        f.write(b"\t".join(map(header.__getitem__, idxs)))
         f.write(b"\n")
         for key in sorted(maude_data):
-            f.write(b"\t".join(maude_data[key]))
+            f.write(b"\t".join(map(maude_data[key].__getitem__, idxs)))
             f.write(b"\n")
 
 
@@ -966,6 +988,7 @@ def parse_args(args: list[str]) -> argparse.Namespace:
     parser.add_argument("-p", "--processes", default=multiprocessing.cpu_count(), type=int, dest="procs")
     parser.add_argument("-o", "--output", default=r"output", type=str, dest="output_dir")
     parser.add_argument("-v", "--version", action="version", version=f"Mauder {__version__}")
+    parser.add_argument("-l", "--long", help="Exports all MRD columns", default=False, action="store_true", dest="long")
     return parser.parse_args(args)
 
 
@@ -974,6 +997,25 @@ def print_long_help():
     This utility searches the mdr-data-files directory for all product codes
     provided, aggregating useful information and exporting it as tab delimited
     table.
+
+    Use the -l option to have all columns extracted.
+
+    The following columns are aggregated by default:
+        MDR_REPORT_KEY
+        DEVICE_EVENT_KEY
+        DATE_RECEIVED
+        BRAND_NAME
+        GENERIC_NAME
+        MANUFACTURER_D_NAME
+        MODEL_NUMBER
+        FOI_TEXT
+        PROBLEM_CODE
+        SEQUENCE_NUMBER_OUTCOME
+        EVENT_KEY
+        ADVERSE_EVENT_FLAG
+        PRODUCT_PROBLEM_FLAG
+        TYPE_OF_REPORT
+        PMA_PMN_NUM
 
     Maude data can be downloaded from the FDA's website in at the following location:
 
